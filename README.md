@@ -44,12 +44,27 @@ npm run dev            # abre em http://localhost:5173
 
 ---
 
-## Primeiro acesso da equipe
+## Acesso da equipe (rota secreta + login)
 
-1. Abra o site → botão **Entrar (equipe)** → **Criar conta** (e-mail + senha) para cada redator (2 a 5 pessoas).
-2. Se o Supabase exigir confirmação por e-mail, confirme antes de entrar — ou desative em
-   **Supabase → Authentication → Providers → Email → "Confirm email"**.
-3. Logado, use a aba **Redação** para publicar.
+O site público (`/`) não tem botão de login — o leitor nunca vê a redação.
+A equipe acessa pela rota **`/redacao`**:
+
+- **https://SEU-SITE/redacao** → tela de login.
+- Primeiro acesso: **Criar conta** (e-mail + senha) para cada redator.
+- Depois de entrar: editor, painel, gerador de arte.
+
+> Para o `/redacao` funcionar ao recarregar a página, o `vercel.json` já redireciona todas as rotas para o app (SPA). Não precisa configurar nada.
+
+## Recursos da redação
+
+- **Upload de foto:** botão "Carregar foto" envia a imagem para o Supabase Storage (bucket `fotos`). Também aceita colar URL.
+- **Destaque do site:** botão "★ Destacar no site" em qualquer notícia publicada define qual vira a manchete principal (só uma por vez).
+- **Gerar arte (Feed/Story):** botão "🎨 Gerar arte" abre o estúdio que monta a imagem no layout da marca em **Feed 1080×1350** e **Story 1080×1920**, com ajuste de enquadramento, e baixa o PNG na hora.
+  - Importante: o download exige que a foto seja **enviada por upload** (não URL externa), por causa de restrições de CORS do navegador no canvas.
+
+## Mobile
+
+Layout responsivo: colunas viram uma só no celular, manchete e fontes se ajustam, inputs com tamanho que evita zoom automático no iOS.
 
 ## Segurança
 
