@@ -130,6 +130,8 @@ export default function App() {
 
   // Rota secreta da redação: só /redacao (qualquer caixa) revela o painel da equipe
   const isRedacaoRoute = typeof window !== "undefined" && /^\/redacao\/?$/i.test(window.location.pathname);
+  const path = typeof window !== "undefined" ? window.location.pathname.replace(/\/$/, "").toLowerCase() : "";
+  const staticPage = { "/quem-somos": "quem", "/principios": "principios", "/contato": "contato" }[path] || null;
 
   const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 2800); };
 
@@ -318,6 +320,8 @@ export default function App() {
 
       {loading ? (
         <div style={{ padding: 60, textAlign: "center", color: "rgba(26,26,24,.4)" }}>Carregando…</div>
+      ) : staticPage ? (
+        <StaticPage page={staticPage} />
       ) : isRedacaoRoute && !isTeam ? (
         <LoginScreen sb={sb} onDone={() => { setView("redacao"); flash("Bem-vindo à redação."); }} />
       ) : isRedacaoRoute && isTeam && view === "redacao" ? (
@@ -337,12 +341,80 @@ export default function App() {
   );
 }
 
+/* ---------- PÁGINAS INSTITUCIONAIS ---------- */
+function StaticPage({ page }) {
+  const H = ({ children }) => <h2 style={{ fontFamily: SERIF, fontSize: 22, color: PINHEIRO, margin: "28px 0 12px", fontWeight: 600 }}>{children}</h2>;
+  const P = ({ children }) => <p style={{ fontSize: 16, lineHeight: 1.75, color: "rgba(26,26,24,.82)", marginBottom: 14 }}>{children}</p>;
+
+  let title, subtitle, body;
+  if (page === "quem") {
+    title = "Quem somos";
+    subtitle = "Informação de Catarina, para Catarina.";
+    body = (
+      <>
+        <P>O Catarina é um veículo digital de notícias dedicado a Santa Catarina. Cobrimos política, economia e os fatos do estado, com um olhar para o que move a cultura e o dia a dia catarinense. Nossa promessa é simples e inegociável: aqui, a informação é apurada, verificada e entregue com clareza.</P>
+        <H>Nosso propósito</H>
+        <P>Informar Santa Catarina com apuração séria e linguagem próxima, sem ruído nem boato. Acreditamos que jornalismo de qualidade não precisa ser distante: explicamos o que aconteceu como quem conta para um amigo — só que com o rigor de uma redação.</P>
+        <H>Para quem fazemos</H>
+        <P>Para o catarinense adulto, que trabalha, vota, empreende e quer entender o que de fato importa no estado — sem sensacionalismo e sem perder tempo com o que não é verdade.</P>
+        <H>Como trabalhamos</H>
+        <P>Somos uma redação enxuta e independente. Publicamos apenas o que checamos, identificamos nossas fontes sempre que possível e corrigimos com transparência quando erramos. Informamos — não militamos.</P>
+        <P style={{ marginTop: 24, fontStyle: "italic", color: "rgba(26,26,24,.6)" }}>Este texto é um rascunho inicial. Ajuste com a história e os nomes reais da equipe do O Catarina.</P>
+      </>
+    );
+  } else if (page === "principios") {
+    title = "Princípios editoriais";
+    subtitle = "Os compromissos que guiam o que publicamos.";
+    body = (
+      <>
+        <P>A credibilidade é o nosso maior patrimônio. Estes princípios orientam cada notícia publicada pelo O Catarina.</P>
+        <H>1. Apuração antes da pressa</H>
+        <P>Preferimos checar a ser os primeiros a errar. Nenhuma informação vai ao ar sem verificação. Quando um fato ainda está em desenvolvimento, deixamos isso claro para o leitor.</P>
+        <H>2. Clareza e contexto</H>
+        <P>Explicamos a notícia em linguagem que qualquer pessoa entende, com o contexto necessário para compreender o que está em jogo — sem jargão desnecessário e sem enrolação.</P>
+        <H>3. Verificação de boatos</H>
+        <P>Quando algo circula como rumor, nós checamos e marcamos com o selo VERIFICADO — confirmando ou desmentindo com base em dados e fontes. É o nosso compromisso contra a desinformação.</P>
+        <H>4. Separação entre fato e opinião</H>
+        <P>Notícia é fato apurado. Quando publicamos análise ou opinião, isso é sinalizado de forma explícita. Informamos, não militamos.</P>
+        <H>5. Correções transparentes</H>
+        <P>Quando erramos, corrigimos de forma aberta e visível. Errar faz parte; esconder o erro, não.</P>
+        <P style={{ marginTop: 24, fontStyle: "italic", color: "rgba(26,26,24,.6)" }}>Rascunho inicial baseado na linha editorial do O Catarina. Revise e ajuste conforme suas diretrizes.</P>
+      </>
+    );
+  } else {
+    title = "Contato";
+    subtitle = "Fale com a redação do O Catarina.";
+    body = (
+      <>
+        <P>Tem uma pauta, uma denúncia, uma correção a sugerir ou quer falar com a nossa equipe? Estamos à disposição.</P>
+        <H>Redação</H>
+        <P>E-mail: <a href="mailto:contato@ocatarina.com.br" style={{ color: MAR, fontWeight: 600 }}>contato@ocatarina.com.br</a></P>
+        <H>Redes sociais</H>
+        <P>Instagram: <a href="https://instagram.com/ocatarinajornal" target="_blank" rel="noopener noreferrer" style={{ color: MAR, fontWeight: 600 }}>@ocatarinajornal</a></P>
+        <H>Sugestões e correções</H>
+        <P>Encontrou um erro em alguma matéria? Escreva para o nosso e-mail com o link da notícia — levamos correções a sério.</P>
+        <P style={{ marginTop: 24, fontStyle: "italic", color: "rgba(26,26,24,.6)" }}>Atualize com os contatos reais (e-mail, telefone, WhatsApp, endereço) do O Catarina.</P>
+      </>
+    );
+  }
+
+  return (
+    <div className="oc-pad" style={{ maxWidth: 760, margin: "0 auto", padding: "40px 24px 20px" }}>
+      <a href="/" style={{ fontSize: 13, fontWeight: 600, color: MAR, textDecoration: "none" }}>← Voltar ao portal</a>
+      <h1 style={{ fontFamily: SERIF, fontSize: "clamp(28px,4vw,40px)", color: PINHEIRO, margin: "18px 0 6px", lineHeight: 1.12, fontWeight: 600 }}>{title}</h1>
+      <div style={{ fontSize: 15, color: MAR, fontWeight: 500, marginBottom: 8 }}>{subtitle}</div>
+      <div style={{ height: 3, width: 64, background: MAR, borderRadius: 2, margin: "16px 0 24px" }} />
+      {body}
+    </div>
+  );
+}
+
 /* ---------- FOOTER DO SITE ---------- */
 function SiteFooter({ setCatFilter }) {
   const toTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
   const pick = (c) => { setCatFilter(c); toTop(); };
   const colTitle = { fontSize: 11, fontWeight: 700, letterSpacing: ".16em", textTransform: "uppercase", color: MAR_BRIGHT, marginBottom: 16 };
-  const link = { display: "block", fontSize: 13.5, padding: "6px 0", color: "rgba(247,246,241,.7)", fontWeight: 300, cursor: "pointer", background: "none", border: "none", textAlign: "left", fontFamily: SANS };
+  const link = { display: "block", fontSize: 13.5, padding: "6px 0", color: "rgba(247,246,241,.7)", fontWeight: 300, cursor: "pointer", background: "none", border: "none", textAlign: "left", fontFamily: SANS, textDecoration: "none" };
   return (
     <footer style={{ background: PINHEIRO_DEEP, color: "rgba(247,246,241,.7)", marginTop: 60, padding: "54px 0 30px" }}>
       <div className="oc-pad" style={{ maxWidth: 1180, margin: "0 auto", padding: "0 24px" }}>
@@ -365,10 +437,10 @@ function SiteFooter({ setCatFilter }) {
           </div>
           <div>
             <div style={colTitle}>O Catarina</div>
-            <button style={link}>Quem somos</button>
+            <a style={link} href="/quem-somos">Quem somos</a>
             <button style={link} onClick={() => pick("VERIFICADO")}>Verificado</button>
-            <button style={link}>Princípios editoriais</button>
-            <button style={link}>Contato</button>
+            <a style={link} href="/principios">Princípios editoriais</a>
+            <a style={link} href="/contato">Contato</a>
           </div>
           <div>
             <div style={colTitle}>Siga</div>

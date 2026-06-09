@@ -25,6 +25,9 @@ export default async function handler(req, res) {
 
   const urls = [
     `  <url>\n    <loc>${origin}/</loc>\n    <changefreq>hourly</changefreq>\n    <priority>1.0</priority>\n  </url>`,
+    `  <url>\n    <loc>${origin}/quem-somos</loc>\n    <changefreq>monthly</changefreq>\n    <priority>0.5</priority>\n  </url>`,
+    `  <url>\n    <loc>${origin}/principios</loc>\n    <changefreq>monthly</changefreq>\n    <priority>0.5</priority>\n  </url>`,
+    `  <url>\n    <loc>${origin}/contato</loc>\n    <changefreq>monthly</changefreq>\n    <priority>0.5</priority>\n  </url>`,
     ...noticias.map(n =>
       `  <url>\n    <loc>${esc(origin + "/n/" + n.id)}</loc>\n    <lastmod>${iso(n.updated_at || n.publish_at)}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>`
     ),
