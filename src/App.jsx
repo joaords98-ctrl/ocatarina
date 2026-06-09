@@ -20,6 +20,12 @@ const SEALS = {
   ECONOMIA: { label: "Economia", bg: "rgba(29,158,117,.14)", fg: PINHEIRO, border: "rgba(29,158,117,.45)" },
   CIDADES: { label: "Cidades", bg: "rgba(14,59,46,.1)", fg: PINHEIRO, border: "rgba(14,59,46,.3)" },
   ESPORTES: { label: "Esportes", bg: "rgba(29,158,117,.14)", fg: PINHEIRO, border: "rgba(29,158,117,.45)" },
+  CULTURA: { label: "Cultura", bg: "rgba(29,158,117,.14)", fg: PINHEIRO, border: "rgba(29,158,117,.45)" },
+  SAUDE: { label: "Saúde", bg: "rgba(29,158,117,.14)", fg: PINHEIRO, border: "rgba(29,158,117,.45)" },
+  EDUCACAO: { label: "Educação", bg: "rgba(29,158,117,.14)", fg: PINHEIRO, border: "rgba(29,158,117,.45)" },
+  SEGURANCA: { label: "Segurança", bg: "rgba(14,59,46,.1)", fg: PINHEIRO, border: "rgba(14,59,46,.3)" },
+  TURISMO: { label: "Turismo", bg: "rgba(29,158,117,.14)", fg: PINHEIRO, border: "rgba(29,158,117,.45)" },
+  OPINIAO: { label: "Opinião", bg: "rgba(14,59,46,.1)", fg: PINHEIRO, border: "rgba(14,59,46,.3)" },
   VERIFICADO: { label: "Verificado", bg: PINHEIRO, fg: MAR_BRIGHT, check: true },
 };
 
@@ -41,6 +47,16 @@ function Seal({ type, style }) {
     </span>
   );
 }
+// renderiza **negrito** dentro de um parágrafo
+function renderBold(text) {
+  const parts = (text || "").split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((p, i) => {
+    if (p.startsWith("**") && p.endsWith("**")) {
+      return <strong key={i} style={{ fontWeight: 700 }}>{p.slice(2, -2)}</strong>;
+    }
+    return <React.Fragment key={i}>{p}</React.Fragment>;
+  });
+}
 function timeAgo(ts) {
   const diff = Date.now() - new Date(ts).getTime();
   if (diff < 0) return "agendada";
@@ -56,6 +72,51 @@ const toRow = a => ({ title: a.title, summary: a.summary, body: a.body, seal: a.
 
 const emptyForm = { id: null, title: "", summary: "", body: "", seal: "POLITICA", city: "", author: "Redação O Catarina", photo: "", featured: false, scheduleOn: false, publishAt: "" };
 
+function todayStr() {
+  try {
+    const d = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    return d.charAt(0).toUpperCase() + d.slice(1) + " · Santa Catarina";
+  } catch { return "Santa Catarina"; }
+}
+
+// Menu fixo de categorias + ticker de plantão
+const MENU_CATS = ["POLITICA", "ECONOMIA", "CIDADES", "ESPORTES", "CULTURA"];
+function CategoryNavAndTicker({ articles, catFilter, setCatFilter, setOpenArticle }) {
+  const now = Date.now();
+  const plantoes = articles.filter(a => a.seal === "PLANTAO" && a.status === "published" && new Date(a.publishAt).getTime() <= now);
+  return (
+    <>
+      <div style={{ background: PINHEIRO, borderBottom: "1px solid rgba(95,214,172,.14)", position: "sticky", top: 0, zIndex: 39 }}>
+        <div className="oc-pad oc-menu-scroll" style={{ maxWidth: 1180, margin: "0 auto", padding: "0 24px", display: "flex", gap: 2, overflowX: "auto" }}>
+          <button onClick={() => setCatFilter(null)} className="oc-menu-item" style={menuStyle(!catFilter)}>Início</button>
+          {MENU_CATS.map(c => (
+            <button key={c} onClick={() => setCatFilter(c)} className="oc-menu-item" style={menuStyle(catFilter === c)}>{SEALS[c].label}</button>
+          ))}
+        </div>
+      </div>
+      {plantoes.length > 0 && (
+        <div style={{ background: VERMELHO, color: "#fff", display: "flex", alignItems: "stretch", overflow: "hidden" }}>
+          <div style={{ background: "rgba(0,0,0,.18)", fontWeight: 700, fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", padding: "11px 18px", display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#fff" }} /> Plantão
+          </div>
+          <div style={{ overflow: "hidden", flex: 1, display: "flex", alignItems: "center", position: "relative" }}>
+            <div className="oc-ticker" style={{ display: "flex", gap: 40, whiteSpace: "nowrap", fontSize: 13.5, fontWeight: 500, paddingLeft: 24 }}>
+              {[...plantoes, ...plantoes].map((p, i) => (
+                <span key={i} onClick={() => setOpenArticle(p)} style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 40 }}>
+                  <span style={{ fontSize: 8, opacity: .6 }}>◆</span> {p.title}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+function menuStyle(active) {
+  return { background: "none", border: "none", cursor: "pointer", fontFamily: SANS, fontWeight: 600, fontSize: 13, letterSpacing: ".05em", textTransform: "uppercase", color: active ? "#fff" : "rgba(247,246,241,.72)", padding: "15px 16px", borderBottom: active ? `3px solid ${MAR}` : "3px solid transparent", whiteSpace: "nowrap" };
+}
+
 export default function App() {
   const [sb, setSb] = useState(null);
   const [netError, setNetError] = useState(false);
@@ -65,6 +126,7 @@ export default function App() {
   const [view, setView] = useState("redacao");
   const [openArticle, setOpenArticle] = useState(null);
   const [toast, setToast] = useState("");
+  const [catFilter, setCatFilter] = useState(null);
 
   // Rota secreta da redação: só /redacao (qualquer caixa) revela o painel da equipe
   const isRedacaoRoute = typeof window !== "undefined" && /^\/redacao\/?$/i.test(window.location.pathname);
@@ -97,6 +159,17 @@ export default function App() {
   }, [sb]);
 
   useEffect(() => { if (sb) loadArticles(); }, [sb, session, loadArticles]);
+
+  // abrir notícia direto pela URL ?n=ID (link compartilhado)
+  useEffect(() => {
+    if (!articles.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const nid = params.get("n");
+    if (nid) {
+      const found = articles.find(x => String(x.id) === nid);
+      if (found) setOpenArticle(found);
+    }
+  }, [articles]);
 
   // realtime: atualiza quando alguém da equipe publica
   useEffect(() => {
@@ -144,7 +217,8 @@ export default function App() {
   // visão pública x equipe
   const now = Date.now();
   const visible = isTeam ? articles : articles.filter(a => a.status === "published" && new Date(a.publishAt).getTime() <= now);
-  const live = visible.filter(a => a.status === "published" && new Date(a.publishAt).getTime() <= now).sort((a, b) => new Date(b.publishAt) - new Date(a.publishAt));
+  const liveAll = visible.filter(a => a.status === "published" && new Date(a.publishAt).getTime() <= now).sort((a, b) => new Date(b.publishAt) - new Date(a.publishAt));
+  const live = catFilter ? liveAll.filter(a => a.seal === catFilter) : liveAll;
   const hero = live.find(a => a.featured) || live[0];
   const rest = live.filter(a => hero && a.id !== hero.id);
 
@@ -184,7 +258,29 @@ export default function App() {
         }
         input,textarea,select{font-size:16px} /* evita zoom no iOS */
         @media(max-width:600px){.oc-input{font-size:16px}}
+        @keyframes oc-scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+        .oc-ticker{animation:oc-scroll 32s linear infinite}
+        .oc-ticker:hover{animation-play-state:paused}
+        .oc-menu-scroll{-webkit-overflow-scrolling:touch;scrollbar-width:none}
+        .oc-menu-scroll::-webkit-scrollbar{display:none}
+        @media(max-width:600px){
+          .oc-date{display:none}
+          .oc-menu-item{padding:13px 13px !important;font-size:12px !important}
+          .oc-share-grid{flex-wrap:wrap}
+        }
       `}</style>
+
+      {/* FAIXA SUPERIOR: data + ao vivo (portal público) */}
+      {!isRedacaoRoute && (
+        <div style={{ background: "#06201880", color: "rgba(247,246,241,.7)", fontSize: 11, letterSpacing: ".08em", borderBottom: "1px solid rgba(95,214,172,.1)" }}>
+          <div className="oc-pad" style={{ maxWidth: 1180, margin: "0 auto", padding: "8px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span className="oc-date" style={{ textTransform: "uppercase" }}>{todayStr()}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 7, color: "#e8a59c" }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: VERMELHO, display: "inline-block" }} /> Cobertura ao vivo — Assembleia Legislativa
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* TOPO */}
       <div style={{ background: PINHEIRO_DEEP, color: AREIA, padding: "14px 0", borderBottom: "1px solid rgba(95,214,172,.14)", position: "sticky", top: 0, zIndex: 40 }}>
@@ -209,6 +305,11 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* MENU DE CATEGORIAS + TICKER PLANTÃO (portal público) */}
+      {!isRedacaoRoute && (
+        <CategoryNavAndTicker articles={articles} catFilter={catFilter} setCatFilter={setCatFilter} setOpenArticle={setOpenArticle} />
+      )}
 
       {toast && <div style={{ position: "fixed", bottom: 26, left: "50%", transform: "translateX(-50%)", zIndex: 90, background: PINHEIRO, color: "#fff", fontSize: 14, fontWeight: 500, padding: "13px 24px", borderRadius: 999, boxShadow: "0 16px 40px -10px rgba(14,59,46,.6)" }}>{toast}</div>}
 
@@ -369,6 +470,7 @@ function Redacao({ articles, saveArticle, delArticle, publishNow, sb, flash }) {
         <div style={{ height: 14 }} />
         <label className="oc-label">Corpo da matéria</label>
         <textarea className="oc-input" rows={6} value={form.body} onChange={e => up("body", e.target.value)} placeholder="Texto completo. Pule uma linha para separar parágrafos." style={{ resize: "vertical" }} />
+        <div style={{ fontSize: 11, color: "rgba(26,26,24,.5)", marginTop: 5 }}>Dica: coloque <b>**asteriscos duplos**</b> em volta de um trecho para deixá-lo em negrito.</div>
         <div style={{ height: 16 }} />
         <label className="oc-label">Editoria / Selo</label>
         <div className="seal-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
@@ -524,12 +626,41 @@ function ArticleModal({ a, onClose }) {
           <div style={{ marginTop: 12, fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: MAR, fontWeight: 600 }}>{a.city} · {timeAgo(a.publishAt)} · {a.author}</div>
           {a.summary && <p style={{ marginTop: 18, fontFamily: SERIF, fontStyle: "italic", fontSize: 18, lineHeight: 1.5, color: "rgba(26,26,24,.78)" }}>{a.summary}</p>}
           <div style={{ height: 1, background: "rgba(14,59,46,.12)", margin: "20px 0" }} />
-          {(a.body || "").split("\n").filter(Boolean).map((p, i) => <p key={i} style={{ fontSize: 15.5, lineHeight: 1.7, color: "rgba(26,26,24,.85)", marginBottom: 14 }}>{p}</p>)}
+          {(a.body || "").split("\n").filter(Boolean).map((p, i) => <p key={i} style={{ fontSize: 15.5, lineHeight: 1.7, color: "rgba(26,26,24,.85)", marginBottom: 14 }}>{renderBold(p)}</p>)}
           {!a.body && <p style={{ fontSize: 14, color: "rgba(26,26,24,.45)" }}>Sem corpo de texto.</p>}
+          <ShareBar a={a} />
           <div style={{ marginTop: 22, paddingTop: 18, borderTop: "1px solid rgba(14,59,46,.12)", display: "flex", alignItems: "center", gap: 10, color: "rgba(26,26,24,.5)", fontSize: 12 }}>
             <Symbol size={26} ring={MAR} w1={MAR} w2="#7d9b8f" /> O Catarina · @ocatarinajornal
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- BARRA DE COMPARTILHAMENTO ---------- */
+function ShareBar({ a }) {
+  const url = typeof window !== "undefined" ? `${window.location.origin}/?n=${a.id}` : "";
+  const text = a.title;
+  const enc = encodeURIComponent;
+  const links = {
+    whatsapp: `https://wa.me/?text=${enc(text + " — " + url)}`,
+    x: `https://twitter.com/intent/tweet?text=${enc(text)}&url=${enc(url)}`,
+    facebook: `https://www.facebook.com/sharer/sharer.php?u=${enc(url)}`,
+  };
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    try { navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {}
+  }
+  const btn = { display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 16px", borderRadius: 999, border: "none", cursor: "pointer", fontFamily: SANS, fontSize: 13, fontWeight: 600, color: "#fff" };
+  return (
+    <div style={{ marginTop: 24, paddingTop: 18, borderTop: "1px solid rgba(14,59,46,.12)" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(26,26,24,.5)", marginBottom: 12 }}>Compartilhar</div>
+      <div className="oc-share-grid" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <a href={links.whatsapp} target="_blank" rel="noopener noreferrer" style={{ ...btn, background: "#25D366" }}>WhatsApp</a>
+        <a href={links.x} target="_blank" rel="noopener noreferrer" style={{ ...btn, background: "#000" }}>X</a>
+        <a href={links.facebook} target="_blank" rel="noopener noreferrer" style={{ ...btn, background: "#1877F2" }}>Facebook</a>
+        <button onClick={copy} style={{ ...btn, background: copied ? MAR : "rgba(14,59,46,.1)", color: copied ? "#fff" : PINHEIRO }}>{copied ? "✓ Link copiado" : "Copiar link"}</button>
       </div>
     </div>
   );
@@ -540,6 +671,8 @@ function ArtStudio({ a, onClose }) {
   const canvasRef = useRef(null);
   const [format, setFormat] = useState("feed"); // feed 4:5 | story 9:16
   const [focusY, setFocusY] = useState(0.4);
+  const [focusX, setFocusX] = useState(0.5);
+  const [zoom, setZoom] = useState(1);
   const [rendering, setRendering] = useState(true);
   const [preview, setPreview] = useState("");
   const [tainted, setTainted] = useState(false);
@@ -575,16 +708,21 @@ function ArtStudio({ a, onClose }) {
           if (!a.photo) { drawNoPhoto(); return resolve(); }
           const img = new Image();
           img.crossOrigin = "anonymous";
-          img.onload = () => { drawCover(img); resolve(); };
-          img.onerror = () => { drawNoPhoto(); resolve(); };
+          let done = false;
+          const finish = (ok) => { if (done) return; done = true; ok ? drawCover(img) : drawNoPhoto(); resolve(); };
+          img.onload = () => finish(true);
+          img.onerror = () => finish(false);
           img.src = a.photo;
+          // se já estiver em cache, onload pode não disparar — desenha na hora
+          if (img.complete && img.naturalWidth > 0) finish(true);
         });
 
         function drawCover(img) {
           const tw = W, th = photoH;
-          const r = Math.max(tw / img.width, th / img.height);
+          const base = Math.max(tw / img.width, th / img.height);
+          const r = base * zoom;
           const dw = img.width * r, dh = img.height * r;
-          const dx = (tw - dw) / 2;
+          const dx = (tw - dw) * focusX;
           const dy = (th - dh) * focusY;
           ctx.save(); ctx.beginPath(); ctx.rect(0, 0, tw, th); ctx.clip();
           ctx.drawImage(img, dx, dy, dw, dh);
@@ -664,7 +802,7 @@ function ArtStudio({ a, onClose }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [format, focusY, a]);
+  }, [format, focusY, focusX, zoom, a]);
 
   function wrap(ctx, text, maxW) {
     ctx.font = "600 70px Lora";
@@ -716,10 +854,20 @@ function ArtStudio({ a, onClose }) {
             ⚠ A prévia aparece, mas o download está bloqueado porque a foto veio de uma URL externa. Para baixar, use o botão <b>Carregar foto</b> (upload) na notícia — fotos enviadas por você funcionam sem restrição.
           </div>
         )}
-        <div style={{ marginTop: 14 }}>
-          <label className="oc-label">Enquadramento vertical da foto</label>
-          <input type="range" min="0" max="1" step="0.05" value={focusY} onChange={e => setFocusY(parseFloat(e.target.value))} style={{ width: "100%", accentColor: MAR }} />
-          <div style={{ fontSize: 11, color: "rgba(26,26,24,.5)" }}>Arraste para subir/descer o foco da imagem.</div>
+        <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div>
+            <label className="oc-label">Posição vertical</label>
+            <input type="range" min="0" max="1" step="0.02" value={focusY} onChange={e => setFocusY(parseFloat(e.target.value))} style={{ width: "100%", accentColor: MAR }} />
+          </div>
+          <div>
+            <label className="oc-label">Posição horizontal</label>
+            <input type="range" min="0" max="1" step="0.02" value={focusX} onChange={e => setFocusX(parseFloat(e.target.value))} style={{ width: "100%", accentColor: MAR }} />
+          </div>
+          <div>
+            <label className="oc-label">Zoom ({zoom.toFixed(1)}×)</label>
+            <input type="range" min="1" max="3" step="0.1" value={zoom} onChange={e => setZoom(parseFloat(e.target.value))} style={{ width: "100%", accentColor: MAR }} />
+          </div>
+          <button onClick={() => { setFocusX(0.5); setFocusY(0.4); setZoom(1); }} style={{ alignSelf: "flex-start", background: "none", border: "none", color: MAR, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>↺ Redefinir enquadramento</button>
         </div>
         <button className="oc-btn" style={{ background: MAR, color: "#fff", width: "100%", marginTop: 16, opacity: (preview && !tainted) ? 1 : .5 }} onClick={download} disabled={!preview || tainted}>
           ⬇ Baixar PNG ({format === "feed" ? "1080×1350" : "1080×1920"})
