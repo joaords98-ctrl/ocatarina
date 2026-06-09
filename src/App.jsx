@@ -81,16 +81,21 @@ function todayStr() {
 
 // Menu fixo de categorias + ticker de plantão
 const MENU_CATS = ["POLITICA", "ECONOMIA", "CIDADES", "ESPORTES", "CULTURA"];
-function CategoryNavAndTicker({ articles, catFilter, setCatFilter, setOpenArticle }) {
+function CategoryNavAndTicker({ articles, catFilter, setCatFilter, setOpenArticle, offHome }) {
   const now = Date.now();
   const plantoes = articles.filter(a => a.seal === "PLANTAO" && a.status === "published" && new Date(a.publishAt).getTime() <= now);
+  // se estiver fora da home (página institucional/redação), navega de volta; senão, filtra na hora
+  const go = (cat) => {
+    if (offHome) { window.location.href = cat ? `/?cat=${cat}` : "/"; }
+    else { setCatFilter(cat); setOpenArticle(null); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  };
   return (
     <>
       <div style={{ background: PINHEIRO, borderBottom: "1px solid rgba(95,214,172,.14)", position: "sticky", top: 0, zIndex: 39 }}>
         <div className="oc-pad oc-menu-scroll" style={{ maxWidth: 1180, margin: "0 auto", padding: "0 24px", display: "flex", gap: 2, overflowX: "auto" }}>
-          <button onClick={() => setCatFilter(null)} className="oc-menu-item" style={menuStyle(!catFilter)}>Início</button>
+          <button onClick={() => go(null)} className="oc-menu-item" style={menuStyle(!catFilter && !offHome)}>Início</button>
           {MENU_CATS.map(c => (
-            <button key={c} onClick={() => setCatFilter(c)} className="oc-menu-item" style={menuStyle(catFilter === c)}>{SEALS[c].label}</button>
+            <button key={c} onClick={() => go(c)} className="oc-menu-item" style={menuStyle(catFilter === c && !offHome)}>{SEALS[c].label}</button>
           ))}
         </div>
       </div>
@@ -126,7 +131,9 @@ export default function App() {
   const [view, setView] = useState("redacao");
   const [openArticle, setOpenArticle] = useState(null);
   const [toast, setToast] = useState("");
-  const [catFilter, setCatFilter] = useState(null);
+  const [catFilter, setCatFilter] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get("cat"); } catch { return null; }
+  });
 
   // Rota secreta da redação: só /redacao (qualquer caixa) revela o painel da equipe
   const isRedacaoRoute = typeof window !== "undefined" && /^\/redacao\/?$/i.test(window.location.pathname);
@@ -290,7 +297,7 @@ export default function App() {
       {/* TOPO */}
       <div style={{ background: PINHEIRO_DEEP, color: AREIA, padding: "14px 0", borderBottom: "1px solid rgba(95,214,172,.14)", position: "sticky", top: 0, zIndex: 40 }}>
         <div className="oc-pad" style={{ maxWidth: 1180, margin: "0 auto", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-          <div onClick={() => setView("portal")} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+          <div onClick={() => { if (staticPage || isRedacaoRoute) { window.location.href = "/"; } else { setCatFilter(null); setOpenArticle(null); window.scrollTo({ top: 0, behavior: "smooth" }); } }} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
             <Symbol size={40} />
             <div>
               <div className="oc-wordmark" style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 500, lineHeight: 1 }}>O Catarina</div>
@@ -313,7 +320,7 @@ export default function App() {
 
       {/* MENU DE CATEGORIAS + TICKER PLANTÃO (portal público) */}
       {!isRedacaoRoute && (
-        <CategoryNavAndTicker articles={articles} catFilter={catFilter} setCatFilter={setCatFilter} setOpenArticle={setOpenArticle} />
+        <CategoryNavAndTicker articles={articles} catFilter={catFilter} setCatFilter={setCatFilter} setOpenArticle={setOpenArticle} offHome={!!staticPage} />
       )}
 
       {toast && <div style={{ position: "fixed", bottom: 26, left: "50%", transform: "translateX(-50%)", zIndex: 90, background: PINHEIRO, color: "#fff", fontSize: 14, fontWeight: 500, padding: "13px 24px", borderRadius: 999, boxShadow: "0 16px 40px -10px rgba(14,59,46,.6)" }}>{toast}</div>}
@@ -397,7 +404,7 @@ function StaticPage({ page }) {
 
   return (
     <div className="oc-pad" style={{ maxWidth: 760, margin: "0 auto", padding: "40px 24px 20px" }}>
-      <a href="/" style={{ fontSize: 13, fontWeight: 600, color: MAR, textDecoration: "none" }}>← Voltar ao portal</a>
+      <a href="/" onClick={(e) => { e.preventDefault(); window.location.href = "/"; }} style={{ fontSize: 13, fontWeight: 600, color: MAR, textDecoration: "none", cursor: "pointer" }}>← Voltar ao portal</a>
       <h1 style={{ fontFamily: SERIF, fontSize: "clamp(28px,4vw,40px)", color: PINHEIRO, margin: "18px 0 6px", lineHeight: 1.12, fontWeight: 600 }}>{title}</h1>
       <div style={{ fontSize: 15, color: MAR, fontWeight: 500, marginBottom: 8 }}>{subtitle}</div>
       <div style={{ height: 3, width: 64, background: MAR, borderRadius: 2, margin: "16px 0 24px" }} />
