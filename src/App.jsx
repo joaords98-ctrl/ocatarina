@@ -275,13 +275,46 @@ function LoginScreen({ sb, onDone }) {
 }
 
 /* ---------- REDAÇÃO ---------- */
+const DRAFT_KEY = "ocatarina:rascunho-automatico";
 function Redacao({ articles, saveArticle, delArticle, publishNow, sb, flash }) {
   const [form, setForm] = useState(emptyForm);
   const [filter, setFilter] = useState("all");
   const [uploading, setUploading] = useState(false);
   const [artFor, setArtFor] = useState(null); // notícia p/ gerar arte
+  const [restored, setRestored] = useState(false);
   const titleRef = useRef(null);
   const up = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  // Recuperar rascunho automático do navegador ao abrir
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (saved) {
+        const d = JSON.parse(saved);
+        // só restaura se for um rascunho novo (sem id) e com algum conteúdo
+        if (d && !d.id && (d.title || d.summary || d.body || d.photo)) {
+          setForm(d);
+          setRestored(true);
+          setTimeout(() => setRestored(false), 5000);
+        }
+      }
+    } catch {}
+  }, []);
+
+  // Salvar automaticamente no navegador a cada alteração (apenas rascunho novo, sem id)
+  useEffect(() => {
+    try {
+      const hasContent = form.title || form.summary || form.body || form.photo;
+      if (!form.id && hasContent) {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+      }
+    } catch {}
+  }, [form]);
+
+  function clearAutosave() {
+    try { localStorage.removeItem(DRAFT_KEY); } catch {}
+  }
+
   function editArticle(a) {
     setForm({ id: a.id, title: a.title, summary: a.summary || "", body: a.body || "", seal: a.seal, city: a.city, author: a.author, photo: a.photo || "", featured: a.featured, scheduleOn: a.status === "scheduled", publishAt: a.status === "scheduled" ? new Date(a.publishAt).toISOString().slice(0, 16) : "" });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -294,7 +327,7 @@ function Redacao({ articles, saveArticle, delArticle, publishNow, sb, flash }) {
     flash("★ Definida como destaque do site.");
   }
 
-  async function save(status) { const ok = await saveArticle(form, status); if (ok) setForm(emptyForm); }
+  async function save(status) { const ok = await saveArticle(form, status); if (ok) { clearAutosave(); setForm(emptyForm); } }
 
   async function uploadPhoto(file) {
     if (!file || !sb) return;
@@ -319,7 +352,15 @@ function Redacao({ articles, saveArticle, delArticle, publishNow, sb, flash }) {
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
           <span style={{ width: 4, height: 22, background: MAR, borderRadius: 2 }} />
           <h2 style={{ fontFamily: SERIF, fontSize: 21, color: PINHEIRO, margin: 0 }}>{form.id ? "Editar notícia" : "Nova notícia"}</h2>
+          {!form.id && (form.title || form.body || form.summary || form.photo) && (
+            <button onClick={() => { clearAutosave(); setForm(emptyForm); }} style={{ marginLeft: "auto", background: "none", border: "none", color: "rgba(26,26,24,.45)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Limpar</button>
+          )}
         </div>
+        {restored && (
+          <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 9, background: "rgba(29,158,117,.1)", color: PINHEIRO, fontSize: 12.5, lineHeight: 1.4 }}>
+            ✓ Recuperamos o que você estava escrevendo antes de sair.
+          </div>
+        )}
         <label className="oc-label">Manchete *</label>
         <input ref={titleRef} className="oc-input" style={{ fontFamily: SERIF, fontSize: 16 }} value={form.title} onChange={e => up("title", e.target.value)} placeholder="Assembleia aprova novo marco do saneamento…" />
         <div style={{ height: 14 }} />
@@ -361,7 +402,7 @@ function Redacao({ articles, saveArticle, delArticle, publishNow, sb, flash }) {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button className="oc-btn" style={{ background: MAR, color: "#fff" }} onClick={() => save("publish")}>{form.scheduleOn && form.publishAt ? "🕒 Agendar" : "✓ Publicar agora"}</button>
           <button className="oc-btn" style={{ background: "rgba(14,59,46,.08)", color: PINHEIRO }} onClick={() => save("draft")}>💾 Rascunho</button>
-          {form.id && <button className="oc-btn" style={{ background: "none", color: "rgba(26,26,24,.5)" }} onClick={() => setForm(emptyForm)}>Cancelar</button>}
+          {form.id && <button className="oc-btn" style={{ background: "none", color: "rgba(26,26,24,.5)" }} onClick={() => { clearAutosave(); setForm(emptyForm); }}>Cancelar</button>}
         </div>
       </div>
 
