@@ -267,6 +267,11 @@ export default function App() {
           .oc-date{display:none}
           .oc-menu-item{padding:13px 13px !important;font-size:12px !important}
           .oc-share-grid{flex-wrap:wrap}
+          .oc-footer-grid{grid-template-columns:1fr 1fr !important;gap:28px !important}
+          .oc-footer-bottom{flex-direction:column;text-align:center}
+        }
+        @media(max-width:760px){
+          .oc-footer-grid{grid-template-columns:1fr 1fr}
         }
       `}</style>
 
@@ -274,10 +279,8 @@ export default function App() {
       {!isRedacaoRoute && (
         <div style={{ background: "#06201880", color: "rgba(247,246,241,.7)", fontSize: 11, letterSpacing: ".08em", borderBottom: "1px solid rgba(95,214,172,.1)" }}>
           <div className="oc-pad" style={{ maxWidth: 1180, margin: "0 auto", padding: "8px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <span className="oc-date" style={{ textTransform: "uppercase" }}>{todayStr()}</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 7, color: "#e8a59c" }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: VERMELHO, display: "inline-block" }} /> Cobertura ao vivo — Assembleia Legislativa
-            </span>
+            <span style={{ textTransform: "uppercase" }}>{todayStr()}</span>
+            <span style={{ color: "rgba(247,246,241,.5)", letterSpacing: ".14em" }}>@ocatarinajornal</span>
           </div>
         </div>
       )}
@@ -325,10 +328,61 @@ export default function App() {
 
       {openArticle && <ArticleModal a={openArticle} onClose={() => setOpenArticle(null)} />}
 
-      <div style={{ background: PINHEIRO_DEEP, color: "rgba(247,246,241,.5)", textAlign: "center", fontSize: 11.5, letterSpacing: ".08em", padding: 20, marginTop: 40 }}>
-        © 2026 O Catarina · Santa Catarina · @ocatarinajornal
-      </div>
+      {!isRedacaoRoute ? <SiteFooter setCatFilter={setCatFilter} /> : (
+        <div style={{ background: PINHEIRO_DEEP, color: "rgba(247,246,241,.5)", textAlign: "center", fontSize: 11.5, letterSpacing: ".08em", padding: 20, marginTop: 40 }}>
+          © 2026 O Catarina · Santa Catarina · @ocatarinajornal
+        </div>
+      )}
     </div>
+  );
+}
+
+/* ---------- FOOTER DO SITE ---------- */
+function SiteFooter({ setCatFilter }) {
+  const toTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
+  const pick = (c) => { setCatFilter(c); toTop(); };
+  const colTitle = { fontSize: 11, fontWeight: 700, letterSpacing: ".16em", textTransform: "uppercase", color: MAR_BRIGHT, marginBottom: 16 };
+  const link = { display: "block", fontSize: 13.5, padding: "6px 0", color: "rgba(247,246,241,.7)", fontWeight: 300, cursor: "pointer", background: "none", border: "none", textAlign: "left", fontFamily: SANS };
+  return (
+    <footer style={{ background: PINHEIRO_DEEP, color: "rgba(247,246,241,.7)", marginTop: 60, padding: "54px 0 30px" }}>
+      <div className="oc-pad" style={{ maxWidth: 1180, margin: "0 auto", padding: "0 24px" }}>
+        <div className="oc-footer-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 36 }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <Symbol size={38} ring={MAR_BRIGHT} w1={MAR} w2="#7d9b8f" />
+              <span style={{ fontFamily: SERIF, fontSize: 26, color: AREIA }}>O Catarina</span>
+            </div>
+            <p style={{ marginTop: 14, fontSize: 13, maxWidth: 300, fontWeight: 300, lineHeight: 1.6 }}>
+              Veículo digital de notícias de Santa Catarina. Apuração séria, linguagem próxima — política, economia e os fatos do estado.
+            </p>
+            <div style={{ marginTop: 16, fontSize: 11, letterSpacing: ".16em", textTransform: "uppercase", color: VERMELHO }}>Informação de Catarina, para Catarina</div>
+          </div>
+          <div>
+            <div style={colTitle}>Editorias</div>
+            {["PLANTAO", "POLITICA", "ECONOMIA", "CIDADES", "ESPORTES"].map(c => (
+              <button key={c} style={link} onClick={() => pick(c)}>{SEALS[c].label}</button>
+            ))}
+          </div>
+          <div>
+            <div style={colTitle}>O Catarina</div>
+            <button style={link}>Quem somos</button>
+            <button style={link} onClick={() => pick("VERIFICADO")}>Verificado</button>
+            <button style={link}>Princípios editoriais</button>
+            <button style={link}>Contato</button>
+          </div>
+          <div>
+            <div style={colTitle}>Siga</div>
+            <a style={link} href="https://instagram.com/ocatarinajornal" target="_blank" rel="noopener noreferrer">@ocatarinajornal</a>
+            <a style={link} href="https://instagram.com/ocatarinajornal" target="_blank" rel="noopener noreferrer">Instagram</a>
+            <a style={link} href="#" >WhatsApp</a>
+          </div>
+        </div>
+        <div className="oc-footer-bottom" style={{ marginTop: 42, paddingTop: 24, borderTop: "1px solid rgba(95,214,172,.12)", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10, fontSize: 11.5, letterSpacing: ".06em", color: "rgba(247,246,241,.45)" }}>
+          <span>© 2026 O Catarina · Santa Catarina, Brasil</span>
+          <span>Termos · Privacidade · Política de correções</span>
+        </div>
+      </div>
+    </footer>
   );
 }
 
