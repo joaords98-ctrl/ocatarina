@@ -3,6 +3,7 @@
   "framework": "vite",
   "rewrites": [
     { "source": "/n/:id", "destination": "/api/n/:id" },
-    { "source": "/((?!api/|n/|assets/|.*\\.).*)", "destination": "/" }
+    { "source": "/sitemap.xml", "destination": "/api/sitemap" },
+    { "source": "/((?!api/|n/|sitemap.xml|robots.txt|assets/|.*\\.).*)", "destination": "/" }
   ]
 }
