@@ -359,7 +359,6 @@ function StaticPage({ page }) {
         <P>Para o catarinense adulto, que trabalha, vota, empreende e quer entender o que de fato importa no estado — sem sensacionalismo e sem perder tempo com o que não é verdade.</P>
         <H>Como trabalhamos</H>
         <P>Somos uma redação enxuta e independente. Publicamos apenas o que checamos, identificamos nossas fontes sempre que possível e corrigimos com transparência quando erramos. Informamos — não militamos.</P>
-        <P style={{ marginTop: 24, fontStyle: "italic", color: "rgba(26,26,24,.6)" }}>Este texto é um rascunho inicial. Ajuste com a história e os nomes reais da equipe do O Catarina.</P>
       </>
     );
   } else if (page === "principios") {
@@ -378,7 +377,6 @@ function StaticPage({ page }) {
         <P>Notícia é fato apurado. Quando publicamos análise ou opinião, isso é sinalizado de forma explícita. Informamos, não militamos.</P>
         <H>5. Correções transparentes</H>
         <P>Quando erramos, corrigimos de forma aberta e visível. Errar faz parte; esconder o erro, não.</P>
-        <P style={{ marginTop: 24, fontStyle: "italic", color: "rgba(26,26,24,.6)" }}>Rascunho inicial baseado na linha editorial do O Catarina. Revise e ajuste conforme suas diretrizes.</P>
       </>
     );
   } else {
@@ -393,7 +391,6 @@ function StaticPage({ page }) {
         <P>Instagram: <a href="https://instagram.com/ocatarinajornal" target="_blank" rel="noopener noreferrer" style={{ color: MAR, fontWeight: 600 }}>@ocatarinajornal</a></P>
         <H>Sugestões e correções</H>
         <P>Encontrou um erro em alguma matéria? Escreva para o nosso e-mail com o link da notícia — levamos correções a sério.</P>
-        <P style={{ marginTop: 24, fontStyle: "italic", color: "rgba(26,26,24,.6)" }}>Atualize com os contatos reais (e-mail, telefone, WhatsApp, endereço) do O Catarina.</P>
       </>
     );
   }
