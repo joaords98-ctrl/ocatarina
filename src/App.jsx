@@ -694,7 +694,7 @@ function ArticleModal({ a, onClose }) {
 
 /* ---------- BARRA DE COMPARTILHAMENTO ---------- */
 function ShareBar({ a }) {
-  const url = typeof window !== "undefined" ? `${window.location.origin}/?n=${a.id}` : "";
+  const url = typeof window !== "undefined" ? `${window.location.origin}/n/${a.id}` : "";
   const text = a.title;
   const enc = encodeURIComponent;
   const links = {
