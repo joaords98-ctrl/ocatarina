@@ -484,18 +484,54 @@ function Redacao({ articles, saveArticle, delArticle, publishNow, sb, flash }) {
 
   async function save(status) { const ok = await saveArticle(form, status); if (ok) { clearAutosave(); setForm(emptyForm); } }
 
+  // redimensiona e comprime para JPEG ~1600px antes de enviar (resolve fotos pesadas e prévia de link)
+  function optimizeImage(file, maxDim = 1600, quality = 0.82) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width >= height) { height = Math.round(height * maxDim / width); width = maxDim; }
+            else { width = Math.round(width * maxDim / height); height = maxDim; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, width, height); // fundo p/ PNG transparente
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => blob ? resolve(blob) : reject(new Error("falha ao processar")),
+            "image/jpeg", quality
+          );
+        };
+        img.onerror = () => reject(new Error("imagem inválida"));
+        img.src = reader.result;
+      };
+      reader.onerror = () => reject(new Error("falha ao ler arquivo"));
+      reader.readAsDataURL(file);
+    });
+  }
+
   async function uploadPhoto(file) {
     if (!file || !sb) return;
-    if (file.size > 10 * 1024 * 1024) return flash("⚠ Imagem acima de 10MB. Reduza e tente de novo.");
+    if (file.size > 25 * 1024 * 1024) return flash("⚠ Imagem muito grande (acima de 25MB).");
     setUploading(true);
-    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-    const path = `noticias/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const { error } = await sb.storage.from("fotos").upload(path, file, { cacheControl: "3600", upsert: false });
+    let blob;
+    try {
+      blob = await optimizeImage(file);
+    } catch (e) {
+      setUploading(false);
+      return flash("Não foi possível processar a imagem. Tente outra.");
+    }
+    const path = `noticias/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+    const { error } = await sb.storage.from("fotos").upload(path, blob, { cacheControl: "3600", upsert: false, contentType: "image/jpeg" });
     setUploading(false);
     if (error) return flash("Erro no upload: " + error.message);
     const { data } = sb.storage.from("fotos").getPublicUrl(path);
     up("photo", data.publicUrl);
-    flash("📷 Foto carregada.");
+    flash("📷 Foto carregada e otimizada.");
   }
 
   const counts = { all: articles.length, published: articles.filter(a => a.status === "published").length, scheduled: articles.filter(a => a.status === "scheduled").length, draft: articles.filter(a => a.status === "draft").length };
