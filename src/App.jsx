@@ -1100,43 +1100,55 @@ function wrapText(ctx, text, maxW) {
 }
 // desenha só a TARJA (header + manchete + rodapé) sobre o vídeo — fundo do vídeo permanece visível em cima
 function drawVideoOverlay(ctx, W, H, a) {
-  const M = 70;
-  // faixa inferior em Verde Pinheiro com degradê suave por cima do vídeo
-  const bandTop = Math.round(H * 0.58);
-  const grad = ctx.createLinearGradient(0, bandTop, 0, H);
+  const M = 80; // mesma margem da arte
+  // área inferior sólida em Verde Pinheiro (como a arte: foto ocupa 80%, resto sólido)
+  const photoH = Math.round(H * 0.80);
+  // degradê smoothstep da imagem -> Pinheiro (forte, igual à arte)
+  const gradStart = Math.round(photoH * 0.45);
+  const grad = ctx.createLinearGradient(0, gradStart, 0, photoH + 4);
   for (let i = 0; i <= 10; i++) {
     const t = i / 10; const e = t * t * (3 - 2 * t);
-    grad.addColorStop(t, `rgba(14,59,46,${0.05 + e * 0.92})`);
+    grad.addColorStop(t, `rgba(14,59,46,${e})`);
   }
-  ctx.fillStyle = grad; ctx.fillRect(0, bandTop, W, H - bandTop);
+  ctx.fillStyle = grad; ctx.fillRect(0, gradStart, W, photoH - gradStart + 4);
+  // base inferior 100% sólida
+  ctx.fillStyle = PINHEIRO; ctx.fillRect(0, photoH, W, H - photoH);
   // vinheta superior p/ header
-  const top = ctx.createLinearGradient(0, 0, 0, 200);
-  top.addColorStop(0, "rgba(10,44,34,.6)"); top.addColorStop(1, "rgba(10,44,34,0)");
-  ctx.fillStyle = top; ctx.fillRect(0, 0, W, 200);
+  const top = ctx.createLinearGradient(0, 0, 0, 220);
+  top.addColorStop(0, "rgba(10,44,34,.55)"); top.addColorStop(1, "rgba(10,44,34,0)");
+  ctx.fillStyle = top; ctx.fillRect(0, 0, W, 220);
 
-  // HEADER
-  drawSymbol(ctx, M + 30, 86, 30);
-  ctx.fillStyle = AREIA; ctx.font = "500 42px Lora"; ctx.textBaseline = "middle";
-  ctx.fillText("O Catarina", M + 74, 88);
-  drawSeal(ctx, a.seal, W - M, 88);
+  // HEADER — mesmas medidas da arte
+  drawSymbol(ctx, M + 34, 96, 34);
+  ctx.fillStyle = AREIA; ctx.font = "500 46px Lora"; ctx.textBaseline = "middle";
+  ctx.fillText("O Catarina", M + 84, 98);
+  drawSeal(ctx, a.seal, W - M, 98);
 
-  // MANCHETE
-  const footY = H - 170;
-  ctx.font = "600 64px Lora";
+  // MANCHETE — fonte 70 / lh 84, com resumo (igual Story)
+  const footY = H - 200;
+  ctx.textBaseline = "alphabetic";
   const maxW = W - M * 2;
+  ctx.font = "600 70px Lora";
   const lines = wrapText(ctx, a.title, maxW);
-  const lh = 76;
-  const titleStartY = footY - 60 - lines.length * lh;
-  ctx.fillStyle = "#fff"; ctx.textBaseline = "alphabetic";
+  const lh = 84;
+  ctx.font = "300 34px 'Libre Franklin'";
+  const sumLines = a.summary ? wrapText(ctx, a.summary, maxW) : [];
+  const titleStartY = footY - 70 - lines.length * lh - sumLines.length * 44;
+  ctx.fillStyle = "#fff"; ctx.font = "600 70px Lora";
   lines.forEach((ln, i) => ctx.fillText(ln, M, titleStartY + i * lh));
+  if (sumLines.length) {
+    ctx.fillStyle = "rgba(247,246,241,.86)"; ctx.font = "300 34px 'Libre Franklin'";
+    const sy = titleStartY + lines.length * lh + 20;
+    sumLines.forEach((ln, i) => ctx.fillText(ln, M, sy + i * 44));
+  }
 
-  // linha verde + rodapé
-  ctx.fillStyle = MAR; ctx.fillRect(M, footY - 4, 64, 5);
-  ctx.fillStyle = MAR_BRIGHT; ctx.font = "700 24px 'Libre Franklin'";
-  ctx.fillText((a.city || "").toUpperCase(), M, footY + 38);
-  ctx.fillStyle = "rgba(247,246,241,.6)"; ctx.font = "500 24px 'Libre Franklin'";
+  // linha verde + rodapé — igual à arte
+  ctx.fillStyle = MAR; ctx.fillRect(M, footY - 6, 70, 5);
+  ctx.fillStyle = MAR_BRIGHT; ctx.font = "700 26px 'Libre Franklin'";
+  ctx.fillText((a.city || "").toUpperCase(), M, footY + 40);
+  ctx.fillStyle = "rgba(247,246,241,.6)"; ctx.font = "500 26px 'Libre Franklin'";
   const handle = "@ocatarinajornal";
-  ctx.fillText(handle, W - M - ctx.measureText(handle).width, footY + 38);
+  ctx.fillText(handle, W - M - ctx.measureText(handle).width, footY + 40);
 }
 
 /* ---------- ESTÚDIO DE VÍDEO (Story 9:16 com tarja) ---------- */
