@@ -512,6 +512,7 @@ function Redacao({ articles, saveArticle, delArticle, publishNow, sb, flash }) {
   const [filter, setFilter] = useState("all");
   const [uploading, setUploading] = useState(false);
   const [artFor, setArtFor] = useState(null); // notícia p/ gerar arte
+  const [videoFor, setVideoFor] = useState(null); // notícia p/ gerar vídeo
   const [restored, setRestored] = useState(false);
   const titleRef = useRef(null);
   const up = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -696,6 +697,7 @@ function Redacao({ articles, saveArticle, delArticle, publishNow, sb, flash }) {
                   {a.status !== "published" && <button onClick={() => publishNow(a.id)} style={btnLink(PINHEIRO)}>Publicar agora</button>}
                   {a.status === "published" && !a.featured && <button onClick={() => makeFeatured(a.id)} style={btnLink("#b5862f")}>★ Destacar no site</button>}
                   <button onClick={() => setArtFor(a)} style={btnLink(PINHEIRO)}>🎨 Gerar arte</button>
+                  <button onClick={() => setVideoFor(a)} style={btnLink(PINHEIRO)}>🎬 Gerar vídeo</button>
                   <button onClick={() => delArticle(a.id)} style={btnLink(VERMELHO)}>Excluir</button>
                 </div>
               </div>
@@ -704,6 +706,7 @@ function Redacao({ articles, saveArticle, delArticle, publishNow, sb, flash }) {
         </div>
       </div>
       {artFor && <ArtStudio a={artFor} onClose={() => setArtFor(null)} />}
+      {videoFor && <VideoStudio a={videoFor} onClose={() => setVideoFor(null)} />}
     </div>
   );
 }
@@ -1083,6 +1086,208 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
   ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+// quebra de texto reutilizável (escopo de módulo)
+function wrapText(ctx, text, maxW) {
+  const words = (text || "").split(" "); const out = []; let cur = "";
+  for (const w of words) {
+    const test = cur ? cur + " " + w : w;
+    if (ctx.measureText(test).width > maxW && cur) { out.push(cur); cur = w; }
+    else cur = test;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+// desenha só a TARJA (header + manchete + rodapé) sobre o vídeo — fundo do vídeo permanece visível em cima
+function drawVideoOverlay(ctx, W, H, a) {
+  const M = 70;
+  // faixa inferior em Verde Pinheiro com degradê suave por cima do vídeo
+  const bandTop = Math.round(H * 0.58);
+  const grad = ctx.createLinearGradient(0, bandTop, 0, H);
+  for (let i = 0; i <= 10; i++) {
+    const t = i / 10; const e = t * t * (3 - 2 * t);
+    grad.addColorStop(t, `rgba(14,59,46,${0.05 + e * 0.92})`);
+  }
+  ctx.fillStyle = grad; ctx.fillRect(0, bandTop, W, H - bandTop);
+  // vinheta superior p/ header
+  const top = ctx.createLinearGradient(0, 0, 0, 200);
+  top.addColorStop(0, "rgba(10,44,34,.6)"); top.addColorStop(1, "rgba(10,44,34,0)");
+  ctx.fillStyle = top; ctx.fillRect(0, 0, W, 200);
+
+  // HEADER
+  drawSymbol(ctx, M + 30, 86, 30);
+  ctx.fillStyle = AREIA; ctx.font = "500 42px Lora"; ctx.textBaseline = "middle";
+  ctx.fillText("O Catarina", M + 74, 88);
+  drawSeal(ctx, a.seal, W - M, 88);
+
+  // MANCHETE
+  const footY = H - 170;
+  ctx.font = "600 64px Lora";
+  const maxW = W - M * 2;
+  const lines = wrapText(ctx, a.title, maxW);
+  const lh = 76;
+  const titleStartY = footY - 60 - lines.length * lh;
+  ctx.fillStyle = "#fff"; ctx.textBaseline = "alphabetic";
+  lines.forEach((ln, i) => ctx.fillText(ln, M, titleStartY + i * lh));
+
+  // linha verde + rodapé
+  ctx.fillStyle = MAR; ctx.fillRect(M, footY - 4, 64, 5);
+  ctx.fillStyle = MAR_BRIGHT; ctx.font = "700 24px 'Libre Franklin'";
+  ctx.fillText((a.city || "").toUpperCase(), M, footY + 38);
+  ctx.fillStyle = "rgba(247,246,241,.6)"; ctx.font = "500 24px 'Libre Franklin'";
+  const handle = "@ocatarinajornal";
+  ctx.fillText(handle, W - M - ctx.measureText(handle).width, footY + 38);
+}
+
+/* ---------- ESTÚDIO DE VÍDEO (Story 9:16 com tarja) ---------- */
+function VideoStudio({ a, onClose }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [videoUrl, setVideoUrl] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [resultUrl, setResultUrl] = useState("");
+  const [msg, setMsg] = useState("");
+  const [supported, setSupported] = useState(true);
+  const W = 1080, H = 1920;
+
+  useEffect(() => {
+    if (typeof MediaRecorder === "undefined" || !HTMLCanvasElement.prototype.captureStream) setSupported(false);
+  }, []);
+
+  function onPick(file) {
+    if (!file) return;
+    setResultUrl(""); setMsg("");
+    if (videoUrl) URL.revokeObjectURL(videoUrl);
+    setVideoUrl(URL.createObjectURL(file));
+  }
+
+  async function startRecording() {
+    const video = videoRef.current, canvas = canvasRef.current;
+    if (!video || !canvas) return;
+    if (document.fonts) { try { await document.fonts.load("600 64px Lora"); await document.fonts.load("700 24px 'Libre Franklin'"); await document.fonts.ready; } catch {} }
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    setResultUrl(""); setRecording(true); setProgress(0); setMsg("");
+
+    // áudio do vídeo + frames do canvas
+    const canvasStream = canvas.captureStream(30);
+    let mixed = canvasStream;
+    try {
+      const vStream = video.captureStream ? video.captureStream() : null;
+      const audioTracks = vStream ? vStream.getAudioTracks() : [];
+      if (audioTracks.length) { audioTracks.forEach(t => canvasStream.addTrack(t)); }
+    } catch {}
+
+    const mime = MediaRecorder.isTypeSupported("video/mp4") ? "video/mp4"
+      : MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9"
+      : "video/webm";
+    const chunks = [];
+    let rec;
+    try { rec = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 8_000_000 }); }
+    catch { rec = new MediaRecorder(mixed); }
+    rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    rec.onstop = () => {
+      const blob = new Blob(chunks, { type: mime.split(";")[0] });
+      setResultUrl(URL.createObjectURL(blob));
+      setRecording(false); setProgress(100);
+    };
+
+    // cover-fit do vídeo no canvas 9:16
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const r = Math.max(W / vw, H / vh);
+    const dw = vw * r, dh = vh * r;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+
+    video.currentTime = 0;
+    await video.play().catch(() => {});
+    rec.start();
+
+    const dur = video.duration && isFinite(video.duration) ? video.duration : 0;
+    const draw = () => {
+      ctx.fillStyle = PINHEIRO; ctx.fillRect(0, 0, W, H);
+      ctx.drawImage(video, dx, dy, dw, dh);
+      drawVideoOverlay(ctx, W, H, a);
+      if (dur) setProgress(Math.min(99, Math.round((video.currentTime / dur) * 100)));
+      if (!video.paused && !video.ended) requestAnimationFrame(draw);
+      else { try { rec.stop(); } catch {} }
+    };
+    requestAnimationFrame(draw);
+  }
+
+  function download() {
+    if (!resultUrl) return;
+    const ext = resultUrl.includes("mp4") ? "mp4" : "webm";
+    const slug = (a.title || "video").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").slice(0, 40);
+    const link = document.createElement("a");
+    link.download = `ocatarina-story-${slug}.${ext}`;
+    link.href = resultUrl; link.click();
+  }
+
+  if (!supported) {
+    return (
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(10,44,34,.6)", zIndex: 86, display: "grid", placeItems: "center", padding: 20 }}>
+        <div onClick={e => e.stopPropagation()} style={{ background: AREIA, maxWidth: 420, borderRadius: 16, padding: 26, textAlign: "center" }}>
+          <p style={{ color: PINHEIRO, fontSize: 15, lineHeight: 1.6 }}>Seu navegador não suporta a gravação de vídeo. Use o <b>Google Chrome no computador</b> para gerar o vídeo com tarja.</p>
+          <button className="oc-btn" style={{ background: MAR, color: "#fff", marginTop: 16 }} onClick={onClose}>Fechar</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(10,44,34,.6)", backdropFilter: "blur(3px)", zIndex: 86, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "30px 16px", overflowY: "auto" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: AREIA, maxWidth: 460, width: "100%", borderRadius: 16, padding: 22 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <h3 style={{ fontFamily: SERIF, fontSize: 20, color: PINHEIRO, margin: 0 }}>Vídeo com tarja · Story 9:16</h3>
+          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: "50%", border: "none", background: "rgba(14,59,46,.1)", color: PINHEIRO, fontSize: 18, cursor: "pointer" }}>×</button>
+        </div>
+
+        {!videoUrl ? (
+          <label className="oc-btn" style={{ background: PINHEIRO, color: "#fff", display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            🎬 Carregar vídeo
+            <input type="file" accept="video/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) onPick(f); e.target.value = ""; }} />
+          </label>
+        ) : (
+          <>
+            <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "#000", aspectRatio: "9/16", maxHeight: 420, margin: "0 auto" }}>
+              <video ref={videoRef} src={videoUrl} controls playsInline style={{ width: "100%", height: "100%", objectFit: "contain", display: resultUrl ? "none" : "block" }} />
+              {resultUrl && <video src={resultUrl} controls playsInline style={{ width: "100%", height: "100%", objectFit: "contain" }} />}
+            </div>
+            <canvas ref={canvasRef} style={{ display: "none" }} />
+
+            {recording && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 13, color: PINHEIRO, marginBottom: 6 }}>Gravando a tarja… {progress}% <span style={{ color: "rgba(26,26,24,.5)" }}>(acontece em tempo real, não feche)</span></div>
+                <div style={{ height: 6, background: "rgba(14,59,46,.12)", borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{ width: progress + "%", height: "100%", background: MAR, transition: "width .2s" }} />
+                </div>
+              </div>
+            )}
+            {msg && <div style={{ marginTop: 10, fontSize: 13, color: VERMELHO }}>{msg}</div>}
+
+            <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+              {!resultUrl && !recording && (
+                <button className="oc-btn" style={{ background: MAR, color: "#fff" }} onClick={startRecording}>▶ Gerar vídeo com tarja</button>
+              )}
+              {resultUrl && (
+                <button className="oc-btn" style={{ background: MAR, color: "#fff" }} onClick={download}>⬇ Baixar vídeo</button>
+              )}
+              {!recording && (
+                <label className="oc-btn" style={{ background: "rgba(14,59,46,.08)", color: PINHEIRO, cursor: "pointer" }}>
+                  Trocar vídeo
+                  <input type="file" accept="video/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) onPick(f); e.target.value = ""; }} />
+                </label>
+              )}
+            </div>
+            <div style={{ marginTop: 12, fontSize: 11.5, color: "rgba(26,26,24,.5)", lineHeight: 1.5 }}>
+              Dica: vídeos curtos (até ~60s) funcionam melhor. A gravação dura o mesmo tempo do vídeo. Use o Chrome no computador para o melhor resultado.
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /* ---------- ERRO DE REDE ---------- */
