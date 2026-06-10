@@ -198,7 +198,7 @@ export default function App() {
     const payload = toRow({ ...form, status: finalStatus, publishAt, city: form.city.trim() || "Santa Catarina", author: form.author.trim() || "Redação O Catarina" });
 
     // só um destaque por vez
-    if (form.featured) await sb.from("noticias").update({ featured: false }).neq("id", form.id || "00000000-0000-0000-0000-000000000000");
+    // (destaques são múltiplos — não desmarca os outros)
 
     let res;
     if (form.id) res = await sb.from("noticias").update(payload).eq("id", form.id);
@@ -228,8 +228,10 @@ export default function App() {
   const visible = isTeam ? articles : articles.filter(a => a.status === "published" && new Date(a.publishAt).getTime() <= now);
   const liveAll = visible.filter(a => a.status === "published" && new Date(a.publishAt).getTime() <= now).sort((a, b) => new Date(b.publishAt) - new Date(a.publishAt));
   const live = catFilter ? liveAll.filter(a => a.seal === catFilter) : liveAll;
-  const hero = live.find(a => a.featured) || live[0];
-  const rest = live.filter(a => hero && a.id !== hero.id);
+  const featured = live.filter(a => a.featured);
+  const heroes = featured.length ? featured : (live[0] ? [live[0]] : []);
+  const heroIds = new Set(heroes.map(h => h.id));
+  const rest = live.filter(a => !heroIds.has(a.id));
 
   if (netError) return <NetError />;
 
@@ -334,7 +336,7 @@ export default function App() {
       ) : isRedacaoRoute && isTeam && view === "redacao" ? (
         <Redacao {...{ articles, saveArticle, delArticle, publishNow, session, sb, flash }} />
       ) : (
-        <Portal {...{ hero, rest, setOpenArticle }} />
+        <Portal {...{ heroes, rest, setOpenArticle }} />
       )}
 
       {openArticle && <ArticleModal a={openArticle} onClose={() => setOpenArticle(null)} />}
@@ -551,12 +553,11 @@ function Redacao({ articles, saveArticle, delArticle, publishNow, sb, flash }) {
     setForm({ id: a.id, title: a.title, summary: a.summary || "", body: a.body || "", seal: a.seal, city: a.city, author: a.author, photo: a.photo || "", featured: a.featured, scheduleOn: a.status === "scheduled", publishAt: a.status === "scheduled" ? new Date(a.publishAt).toISOString().slice(0, 16) : "" });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
-  async function makeFeatured(id) {
+  async function toggleFeatured(id, current) {
     if (!sb) return;
-    await sb.from("noticias").update({ featured: false }).neq("id", id);
-    const { error } = await sb.from("noticias").update({ featured: true, status: "published", publish_at: new Date().toISOString() }).eq("id", id);
+    const { error } = await sb.from("noticias").update({ featured: !current }).eq("id", id);
     if (error) return flash("Erro: " + error.message);
-    flash("★ Definida como destaque do site.");
+    flash(!current ? "★ Adicionada aos destaques." : "Removida dos destaques.");
   }
 
   async function save(status) { const ok = await saveArticle(form, status); if (ok) { clearAutosave(); setForm(emptyForm); } }
@@ -663,7 +664,7 @@ function Redacao({ articles, saveArticle, delArticle, publishNow, sb, flash }) {
         {form.photo && <div style={{ marginTop: 10, borderRadius: 9, overflow: "hidden", aspectRatio: "16/7", background: PINHEIRO }}><img src={form.photo} alt="" referrerPolicy="no-referrer" onError={e => (e.target.style.display = "none")} style={{ width: "100%", height: "100%", objectFit: "cover" }} /></div>}
         <div style={{ height: 18 }} />
         <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, cursor: "pointer", color: PINHEIRO, fontWeight: 500 }}><input type="checkbox" checked={form.featured} onChange={e => up("featured", e.target.checked)} style={{ width: 17, height: 17, accentColor: MAR }} />Manchete principal</label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, cursor: "pointer", color: PINHEIRO, fontWeight: 500 }}><input type="checkbox" checked={form.featured} onChange={e => up("featured", e.target.checked)} style={{ width: 17, height: 17, accentColor: MAR }} />Destaque (carrossel do topo)</label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, cursor: "pointer", color: PINHEIRO, fontWeight: 500 }}><input type="checkbox" checked={form.scheduleOn} onChange={e => up("scheduleOn", e.target.checked)} style={{ width: 17, height: 17, accentColor: MAR }} />Agendar</label>
           {form.scheduleOn && <input className="oc-input" type="datetime-local" style={{ width: "auto" }} value={form.publishAt} onChange={e => up("publishAt", e.target.value)} />}
         </div>
@@ -695,7 +696,7 @@ function Redacao({ articles, saveArticle, delArticle, publishNow, sb, flash }) {
                 <div style={{ display: "flex", gap: 14, marginTop: 9, flexWrap: "wrap" }}>
                   <button onClick={() => editArticle(a)} style={btnLink(MAR)}>Editar</button>
                   {a.status !== "published" && <button onClick={() => publishNow(a.id)} style={btnLink(PINHEIRO)}>Publicar agora</button>}
-                  {a.status === "published" && !a.featured && <button onClick={() => makeFeatured(a.id)} style={btnLink("#b5862f")}>★ Destacar no site</button>}
+                  {a.status === "published" && <button onClick={() => toggleFeatured(a.id, a.featured)} style={btnLink(a.featured ? MAR : "#b5862f")}>{a.featured ? "★ Em destaque" : "☆ Destacar"}</button>}
                   <button onClick={() => setArtFor(a)} style={btnLink(PINHEIRO)}>🎨 Gerar arte</button>
                   <button onClick={() => setVideoFor(a)} style={btnLink(PINHEIRO)}>🎬 Gerar vídeo</button>
                   <button onClick={() => delArticle(a.id)} style={btnLink(VERMELHO)}>Excluir</button>
@@ -718,8 +719,66 @@ function StatusPill({ status, publishAt }) {
 }
 
 /* ---------- PORTAL ---------- */
-function Portal({ hero, rest, setOpenArticle }) {
-  if (!hero) return (
+/* ---------- CARROSSEL DE DESTAQUES ---------- */
+function HeroCarousel({ heroes, setOpenArticle }) {
+  const [idx, setIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const multi = heroes.length > 1;
+
+  useEffect(() => { if (idx >= heroes.length) setIdx(0); }, [heroes.length, idx]);
+
+  useEffect(() => {
+    if (!multi || paused) return;
+    const t = setInterval(() => setIdx(i => (i + 1) % heroes.length), 5000);
+    return () => clearInterval(t);
+  }, [multi, paused, heroes.length]);
+
+  const hero = heroes[idx] || heroes[0];
+
+  return (
+    <div
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      style={{ position: "relative" }}
+    >
+      <article onClick={() => setOpenArticle(hero)} className="oc-card" style={{ cursor: "pointer", position: "relative", borderRadius: 14, overflow: "hidden", background: PINHEIRO, boxShadow: "0 30px 60px -30px rgba(14,59,46,.55)" }}>
+        <div style={{ aspectRatio: "16/10", position: "relative", background: `radial-gradient(120% 90% at 70% 10%,#1d6048,${PINHEIRO} 45%,${PINHEIRO_DEEP})` }}>
+          {heroes.map((h, i) => (
+            <div key={h.id} style={{ position: "absolute", inset: 0, opacity: i === idx ? 1 : 0, transition: "opacity .6s ease", pointerEvents: i === idx ? "auto" : "none" }}>
+              {h.photo && <img src={h.photo} alt="" referrerPolicy="no-referrer" onError={e => (e.target.style.display = "none")} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(14,59,46,.15) 25%,rgba(10,44,34,.55) 60%,rgba(10,44,34,.96) 100%)" }} />
+              <div className="oc-hero-pad" style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "30px 32px", color: "#fff" }}>
+                <Seal type={h.seal} style={{ marginBottom: 14 }} />
+                <h1 className="oc-hero-title" style={{ fontFamily: SERIF, fontWeight: 600, fontSize: "clamp(24px,3vw,40px)", lineHeight: 1.1, margin: 0, letterSpacing: "-.01em" }}>{h.title}</h1>
+                {h.summary && <p style={{ marginTop: 12, fontSize: 15.5, color: "rgba(247,246,241,.88)", fontWeight: 300, maxWidth: 620 }}>{h.summary}</p>}
+                <div style={{ marginTop: 16, fontSize: 11, letterSpacing: ".13em", textTransform: "uppercase", color: MAR_BRIGHT }}>{h.city} · {timeAgo(h.publishAt)} · {h.author}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </article>
+      {multi && (
+        <div style={{ position: "absolute", bottom: 14, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 8, zIndex: 3 }}>
+          {heroes.map((h, i) => (
+            <button
+              key={h.id}
+              onClick={(e) => { e.stopPropagation(); setIdx(i); }}
+              aria-label={`Destaque ${i + 1}`}
+              style={{
+                width: i === idx ? 26 : 9, height: 9, borderRadius: 999, border: "none", cursor: "pointer",
+                background: i === idx ? MAR_BRIGHT : "rgba(247,246,241,.5)", transition: "all .3s", padding: 0,
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- PORTAL ---------- */
+function Portal({ heroes, rest, setOpenArticle }) {
+  if (!heroes || !heroes.length) return (
     <div style={{ maxWidth: 1180, margin: "0 auto", padding: "80px 24px", textAlign: "center", color: "rgba(26,26,24,.45)" }}>
       <Symbol size={60} ring={MAR} w1={MAR} w2="#7d9b8f" />
       <p style={{ marginTop: 18, fontSize: 16 }}>Nenhuma notícia publicada ainda.</p>
@@ -728,18 +787,7 @@ function Portal({ hero, rest, setOpenArticle }) {
   return (
     <div className="oc-pad" style={{ maxWidth: 1180, margin: "0 auto", padding: "28px 24px 10px" }}>
       <div className="grid-2 portal-lede">
-        <article onClick={() => setOpenArticle(hero)} className="oc-card" style={{ cursor: "pointer", position: "relative", borderRadius: 14, overflow: "hidden", background: PINHEIRO, boxShadow: "0 30px 60px -30px rgba(14,59,46,.55)" }}>
-          <div style={{ aspectRatio: "16/10", position: "relative", background: `radial-gradient(120% 90% at 70% 10%,#1d6048,${PINHEIRO} 45%,${PINHEIRO_DEEP})` }}>
-            {hero.photo && <img src={hero.photo} alt="" referrerPolicy="no-referrer" onError={e => (e.target.style.display = "none")} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
-            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(14,59,46,.15) 25%,rgba(10,44,34,.55) 60%,rgba(10,44,34,.96) 100%)" }} />
-            <div className="oc-hero-pad" style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "30px 32px", color: "#fff" }}>
-              <Seal type={hero.seal} style={{ marginBottom: 14 }} />
-              <h1 className="oc-hero-title" style={{ fontFamily: SERIF, fontWeight: 600, fontSize: "clamp(24px,3vw,40px)", lineHeight: 1.1, margin: 0, letterSpacing: "-.01em" }}>{hero.title}</h1>
-              {hero.summary && <p style={{ marginTop: 12, fontSize: 15.5, color: "rgba(247,246,241,.88)", fontWeight: 300, maxWidth: 620 }}>{hero.summary}</p>}
-              <div style={{ marginTop: 16, fontSize: 11, letterSpacing: ".13em", textTransform: "uppercase", color: MAR_BRIGHT }}>{hero.city} · {timeAgo(hero.publishAt)} · {hero.author}</div>
-            </div>
-          </div>
-        </article>
+        <HeroCarousel heroes={heroes} setOpenArticle={setOpenArticle} />
         <aside style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           {rest.slice(0, 4).map(a => (
             <div key={a.id} onClick={() => setOpenArticle(a)} style={{ cursor: "pointer", paddingBottom: 18, borderBottom: "1px solid rgba(14,59,46,.12)" }}>
