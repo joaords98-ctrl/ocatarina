@@ -19,6 +19,10 @@ function escapeHtml(s = "") {
 function isBot(ua = "") {
   return /facebookexternalhit|Facebot|Twitterbot|WhatsApp|LinkedInBot|Slackbot|TelegramBot|Discordbot|Pinterest|Googlebot|bingbot|redditbot|Embedly|vkShare|W3C_Validator|baiduspider|Applebot|SkypeUriPreview/i.test(ua);
 }
+function isSearchEngine(ua = "") {
+  // buscadores: devem indexar o conteúdo, não ser redirecionados
+  return /Googlebot|bingbot|Applebot|baiduspider|DuckDuckBot|YandexBot|Google-InspectionTool|Storebot-Google/i.test(ua);
+}
 
 export default async function handler(req, res) {
   const host = req.headers.host || "www.ocatarina.com.br";
@@ -60,29 +64,67 @@ export default async function handler(req, res) {
   const desc = n ? escapeHtml(n.summary || fallbackDesc) : fallbackDesc;
   const image = n && n.photo ? n.photo : `${origin}/og-default.png`;
   const fullTitle = n ? `${title}${seal ? " · " + seal : ""} — ${siteName}` : siteName;
+  const author = n && n.author ? escapeHtml(n.author) : "Redação O Catarina";
+  const published = n && n.publish_at ? new Date(n.publish_at).toISOString() : "";
+  const modified = n && (n.updated_at || n.publish_at) ? new Date(n.updated_at || n.publish_at).toISOString() : "";
+  const section = seal || "Notícias";
+  const canonical = `${origin}/n/${encodeURIComponent(id)}`;
+
+  // dados estruturados Schema.org (NewsArticle) — ajuda o Google a entender e destacar
+  const jsonLd = n ? JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    "headline": n.title,
+    "description": n.summary || fallbackDesc,
+    "image": [image],
+    "datePublished": published,
+    "dateModified": modified,
+    "articleSection": section,
+    "author": { "@type": "Organization", "name": author },
+    "publisher": {
+      "@type": "NewsMediaOrganization",
+      "name": siteName,
+      "logo": { "@type": "ImageObject", "url": `${origin}/og-default.png` }
+    },
+    "mainEntityOfPage": { "@type": "WebPage", "@id": canonical },
+    "url": canonical,
+    "inLanguage": "pt-BR"
+  }) : null;
 
   const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${fullTitle}</title>
 <meta name="description" content="${desc}">
+<link rel="canonical" href="${canonical}">
+<meta name="robots" content="index, follow, max-image-preview:large">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="${siteName}">
 <meta property="og:title" content="${fullTitle}">
 <meta property="og:description" content="${desc}">
 <meta property="og:image" content="${escapeHtml(image)}">
-<meta property="og:url" content="${articleUrl}">
+<meta property="og:url" content="${canonical}">
 <meta property="og:locale" content="pt_BR">
+${published ? `<meta property="article:published_time" content="${published}">` : ""}
+${modified ? `<meta property="article:modified_time" content="${modified}">` : ""}
+${seal ? `<meta property="article:section" content="${escapeHtml(seal)}">` : ""}
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${fullTitle}">
 <meta name="twitter:description" content="${desc}">
 <meta name="twitter:image" content="${escapeHtml(image)}">
-<meta http-equiv="refresh" content="0; url=${articleUrl}">
+${jsonLd ? `<script type="application/ld+json">${jsonLd}</script>` : ""}
+${isSearchEngine(ua) ? "" : `<meta http-equiv="refresh" content="0; url=${articleUrl}">`}
 </head>
 <body>
-<p>${title}</p>
+<article>
+<h1>${title}</h1>
+${n && n.summary ? `<p><strong>${desc}</strong></p>` : ""}
+${n && n.body ? `<div>${escapeHtml(n.body).split("\n").filter(Boolean).map(p => `<p>${p}</p>`).join("")}</div>` : ""}
+<p>${author}${n && n.city ? " · " + escapeHtml(n.city) : ""}</p>
 <p><a href="${articleUrl}">Ler em ${siteName}</a></p>
+</article>
 </body>
 </html>`;
 
