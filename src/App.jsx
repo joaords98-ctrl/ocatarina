@@ -895,6 +895,10 @@ function ArtStudio({ a, sb, flash, onClose }) {
   const [tainted, setTainted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedUrl, setSavedUrl] = useState("");
+  const [caption, setCaption] = useState("");
+  const [posting, setPosting] = useState(false);
+  const [postWhen, setPostWhen] = useState("now");
+  const [scheduleAt, setScheduleAt] = useState("");
 
   const DIMS = { feed: [1080, 1350], story: [1080, 1920] };
 
@@ -1065,11 +1069,39 @@ function ArtStudio({ a, sb, flash, onClose }) {
       if (error) throw error;
       const { data } = sb.storage.from("fotos").getPublicUrl(path);
       setSavedUrl(data.publicUrl);
+      // legenda automática (editável) a partir da notícia
+      if (!caption) {
+        const sealTxt = a.seal ? `[${(SEALS[a.seal]?.label || a.seal).toUpperCase()}] ` : "";
+        const cidade = a.city ? `📍 ${a.city}\n\n` : "";
+        setCaption(`${sealTxt}${a.title}\n\n${a.summary || ""}\n\n${cidade}#SantaCatarina #OCatarina #${(a.seal || "noticias").toLowerCase()}`);
+      }
       flash && flash("🖼️ Arte salva no site.");
     } catch (e) {
       flash && flash("Erro ao salvar a arte: " + (e.message || "tente de novo"));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function postToBuffer() {
+    if (!savedUrl) { flash && flash("Salve a arte primeiro."); return; }
+    if (!caption.trim()) { flash && flash("Escreva uma legenda."); return; }
+    if (postWhen === "schedule" && !scheduleAt) { flash && flash("Escolha a data do agendamento."); return; }
+    setPosting(true);
+    try {
+      const when = postWhen === "schedule" ? new Date(scheduleAt).toISOString() : "now";
+      const r = await fetch("/api/postar-buffer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: savedUrl, caption, when }),
+      });
+      const data = await r.json();
+      if (!r.ok || !data.ok) throw new Error(data.error || "Falha ao postar.");
+      flash && flash(data.scheduled ? "📅 Post agendado no Buffer!" : "✅ Enviado ao Buffer para publicação!");
+    } catch (e) {
+      flash && flash("Erro: " + (e.message || "não foi possível postar."));
+    } finally {
+      setPosting(false);
     }
   }
 
@@ -1116,10 +1148,23 @@ function ArtStudio({ a, sb, flash, onClose }) {
           {saving ? "Salvando…" : "🖼️ Salvar arte no site"}
         </button>
         {savedUrl && (
-          <div style={{ marginTop: 12, padding: 12, background: "rgba(29,158,117,.1)", borderRadius: 10, fontSize: 12.5, color: PINHEIRO }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>✓ Arte salva. Link público:</div>
-            <div style={{ wordBreak: "break-all", color: MAR, marginBottom: 8 }}>{savedUrl}</div>
-            <button onClick={() => { try { navigator.clipboard.writeText(savedUrl); flash && flash("Link copiado."); } catch {} }} style={{ background: MAR, color: "#fff", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Copiar link</button>
+          <div style={{ marginTop: 12, padding: 14, background: "rgba(29,158,117,.08)", borderRadius: 10, border: "1px solid rgba(29,158,117,.2)" }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: PINHEIRO, marginBottom: 10 }}>📲 Postar no Instagram (via Buffer)</div>
+            <label className="oc-label">Legenda</label>
+            <textarea className="oc-input" rows={5} value={caption} onChange={e => setCaption(e.target.value)} style={{ resize: "vertical", fontSize: 13 }} />
+            <div style={{ display: "flex", gap: 8, margin: "10px 0" }}>
+              <button onClick={() => setPostWhen("now")} className={"chip" + (postWhen === "now" ? " active" : "")}>Publicar agora</button>
+              <button onClick={() => setPostWhen("schedule")} className={"chip" + (postWhen === "schedule" ? " active" : "")}>Agendar</button>
+            </div>
+            {postWhen === "schedule" && (
+              <input type="datetime-local" className="oc-input" value={scheduleAt} onChange={e => setScheduleAt(e.target.value)} style={{ marginBottom: 10 }} />
+            )}
+            <button className="oc-btn" style={{ background: "#C13584", color: "#fff", width: "100%", opacity: posting ? .6 : 1 }} onClick={postToBuffer} disabled={posting}>
+              {posting ? "Enviando…" : postWhen === "schedule" ? "📅 Agendar no Buffer" : "✅ Publicar agora"}
+            </button>
+            <div style={{ marginTop: 8, fontSize: 11, color: "rgba(26,26,24,.5)", lineHeight: 1.5 }}>
+              O post é criado no Buffer, que publica no @ocatarinajornal. Confira no painel do Buffer.
+            </div>
           </div>
         )}
       </div>
