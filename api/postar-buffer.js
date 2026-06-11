@@ -1,16 +1,24 @@
-// Vercel Serverless Function — cria post no Buffer (Instagram)
-// Recebe { imageUrl, caption, when } e cria o update no Buffer.
-// A chave fica na variável de ambiente BUFFER_ACCESS_TOKEN (NUNCA no código).
+// Vercel Serverless Function — cria post no Buffer (Instagram) via API GraphQL nova
+// API: https://api.buffer.com  (Bearer token = BUFFER_ACCESS_TOKEN)
+// Suporta imagem por URL pública (a arte salva no Supabase).
 //
-// when: "now" publica imediatamente | ISO date agenda para a data/hora
+// Fluxo: organizations -> channels(orgId) -> createPost(channelId, text, assets[image])
 //
-// Observação: o Buffer usa a API REST clássica (api.bufferapp.com/1).
-// Endpoints usados:
-//   GET  /1/profiles.json                 -> lista canais conectados
-//   POST /1/updates/create.json           -> cria o post
+// body: { imageUrl, caption, when }
+//   when: "now" => addToQueue (próximo horário) | ISO date => customScheduled
 
 const BUFFER_TOKEN = process.env.BUFFER_ACCESS_TOKEN || "";
-const BUFFER_BASE = "https://api.bufferapp.com/1";
+const BUFFER_API = "https://api.buffer.com";
+
+async function gql(query, token) {
+  const r = await fetch(BUFFER_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ query }),
+  });
+  const j = await r.json();
+  return { ok: r.ok, json: j };
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -21,7 +29,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Chave do Buffer não configurada no servidor (BUFFER_ACCESS_TOKEN)." });
   }
 
-  // corpo
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
   const { imageUrl, caption, when } = body || {};
@@ -29,48 +36,74 @@ export default async function handler(req, res) {
   if (!imageUrl) return res.status(400).json({ error: "Falta a imagem (imageUrl)." });
   if (!caption || !caption.trim()) return res.status(400).json({ error: "Falta a legenda." });
 
+  // escapa aspas/quebras para inserir no corpo GraphQL
+  const esc = (s) => String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+
   try {
-    // 1) achar o canal do Instagram
-    const profRes = await fetch(`${BUFFER_BASE}/profiles.json?access_token=${encodeURIComponent(BUFFER_TOKEN)}`);
-    const profiles = await profRes.json();
-    if (!Array.isArray(profiles)) {
-      return res.status(502).json({ error: "Não foi possível listar os canais do Buffer.", detail: profiles });
+    // 1) organizações
+    const orgQ = `query { organizations { id name } }`;
+    const orgR = await gql(orgQ, BUFFER_TOKEN);
+    const orgs = orgR.json?.data?.organizations;
+    if (!Array.isArray(orgs) || !orgs.length) {
+      return res.status(502).json({ error: "Não foi possível obter sua organização no Buffer.", detail: orgR.json });
     }
-    const insta = profiles.find(p => (p.service || "").toLowerCase() === "instagram") || profiles[0];
-    if (!insta) return res.status(404).json({ error: "Nenhum canal do Instagram encontrado no Buffer." });
+    const orgId = orgs[0].id;
 
-    // 2) montar o corpo do update
-    const params = new URLSearchParams();
-    params.append("access_token", BUFFER_TOKEN);
-    params.append("profile_ids[]", insta.id);
-    params.append("text", caption);
-    params.append("media[photo]", imageUrl);
-    params.append("media[thumbnail]", imageUrl);
+    // 2) canais da organização
+    const chQ = `query { channels(input: { organizationId: "${orgId}" }) { id service displayName name } }`;
+    const chR = await gql(chQ, BUFFER_TOKEN);
+    const channels = chR.json?.data?.channels;
+    if (!Array.isArray(channels) || !channels.length) {
+      return res.status(502).json({ error: "Nenhum canal encontrado no Buffer.", detail: chR.json });
+    }
+    const insta = channels.find(c => (c.service || "").toLowerCase() === "instagram") || channels[0];
+    if (!insta) return res.status(404).json({ error: "Canal do Instagram não encontrado no Buffer." });
 
+    // 3) montar createPost
+    let scheduling, dueLine = "";
     if (when && when !== "now") {
-      // agendar: Buffer aceita scheduled_at em ISO/epoch
-      const ts = Math.floor(new Date(when).getTime() / 1000);
-      if (ts && !isNaN(ts)) params.append("scheduled_at", String(ts));
+      const iso = new Date(when).toISOString();
+      scheduling = "customScheduled";
+      dueLine = `dueAt: "${iso}"`;
     } else {
-      params.append("now", "true");
+      scheduling = "addToQueue";
     }
 
-    const postRes = await fetch(`${BUFFER_BASE}/updates/create.json`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
-    });
-    const result = await postRes.json();
+    const mutation = `
+mutation {
+  createPost(input: {
+    text: "${esc(caption)}"
+    channelId: "${insta.id}"
+    schedulingType: automatic
+    mode: ${scheduling}
+    ${dueLine}
+    assets: [ { image: { url: "${esc(imageUrl)}" } } ]
+  }) {
+    ... on PostActionSuccess { post { id dueAt } }
+    ... on MutationError { message }
+  }
+}`.trim();
 
-    if (!postRes.ok || result.success === false) {
-      return res.status(502).json({ error: result.message || "Buffer recusou o post.", detail: result });
+    const postR = await gql(mutation, BUFFER_TOKEN);
+    const payload = postR.json?.data?.createPost;
+
+    // erro GraphQL (sintaxe/permissão)
+    if (postR.json?.errors?.length) {
+      return res.status(502).json({ error: postR.json.errors[0]?.message || "Erro do Buffer.", detail: postR.json.errors });
+    }
+    // erro de mutação (limite, validação)
+    if (payload && payload.message && !payload.post) {
+      return res.status(502).json({ error: payload.message });
+    }
+    if (!payload || !payload.post) {
+      return res.status(502).json({ error: "O Buffer não confirmou a criação do post.", detail: postR.json });
     }
 
     return res.status(200).json({
       ok: true,
-      scheduled: !(when === "now" || !when),
-      channel: insta.formatted_username || insta.service_username || "Instagram",
-      buffer: result,
+      scheduled: scheduling === "customScheduled",
+      channel: insta.displayName || insta.name || "Instagram",
+      postId: payload.post.id,
     });
   } catch (e) {
     return res.status(500).json({ error: "Falha ao chamar o Buffer: " + (e.message || "erro desconhecido") });
