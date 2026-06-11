@@ -706,7 +706,7 @@ function Redacao({ articles, saveArticle, delArticle, publishNow, sb, flash }) {
           ))}
         </div>
       </div>
-      {artFor && <ArtStudio a={artFor} onClose={() => setArtFor(null)} />}
+      {artFor && <ArtStudio a={artFor} sb={sb} flash={flash} onClose={() => setArtFor(null)} />}
       {videoFor && <VideoStudio a={videoFor} onClose={() => setVideoFor(null)} />}
     </div>
   );
@@ -884,7 +884,7 @@ function ShareBar({ a }) {
 }
 
 /* ---------- ESTÚDIO DE ARTE (Feed / Story) ---------- */
-function ArtStudio({ a, onClose }) {
+function ArtStudio({ a, sb, flash, onClose }) {
   const canvasRef = useRef(null);
   const [format, setFormat] = useState("feed"); // feed 4:5 | story 9:16
   const [focusY, setFocusY] = useState(0.4);
@@ -893,6 +893,8 @@ function ArtStudio({ a, onClose }) {
   const [rendering, setRendering] = useState(true);
   const [preview, setPreview] = useState("");
   const [tainted, setTainted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedUrl, setSavedUrl] = useState("");
 
   const DIMS = { feed: [1080, 1350], story: [1080, 1920] };
 
@@ -1050,6 +1052,27 @@ function ArtStudio({ a, onClose }) {
     }
   }
 
+  async function saveArt() {
+    if (!sb) { flash && flash("Supabase indisponível."); return; }
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    setSaving(true); setSavedUrl("");
+    try {
+      const blob = await new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error("falha")), "image/png"));
+      const slug = (a.title || "arte").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").slice(0, 40);
+      const path = `artes/${format}-${Date.now()}-${slug}.png`;
+      const { error } = await sb.storage.from("fotos").upload(path, blob, { cacheControl: "3600", upsert: false, contentType: "image/png" });
+      if (error) throw error;
+      const { data } = sb.storage.from("fotos").getPublicUrl(path);
+      setSavedUrl(data.publicUrl);
+      flash && flash("🖼️ Arte salva no site.");
+    } catch (e) {
+      flash && flash("Erro ao salvar a arte: " + (e.message || "tente de novo"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(10,44,34,.6)", backdropFilter: "blur(3px)", zIndex: 85, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "30px 16px", overflowY: "auto" }}>
       <div onClick={e => e.stopPropagation()} style={{ background: AREIA, maxWidth: 520, width: "100%", borderRadius: 16, padding: 22, boxShadow: "0 40px 80px -20px rgba(0,0,0,.5)" }}>
@@ -1089,6 +1112,16 @@ function ArtStudio({ a, onClose }) {
         <button className="oc-btn" style={{ background: MAR, color: "#fff", width: "100%", marginTop: 16, opacity: (preview && !tainted) ? 1 : .5 }} onClick={download} disabled={!preview || tainted}>
           ⬇ Baixar PNG ({format === "feed" ? "1080×1350" : "1080×1920"})
         </button>
+        <button className="oc-btn" style={{ background: PINHEIRO, color: "#fff", width: "100%", marginTop: 10, opacity: saving ? .6 : 1 }} onClick={saveArt} disabled={saving}>
+          {saving ? "Salvando…" : "🖼️ Salvar arte no site"}
+        </button>
+        {savedUrl && (
+          <div style={{ marginTop: 12, padding: 12, background: "rgba(29,158,117,.1)", borderRadius: 10, fontSize: 12.5, color: PINHEIRO }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>✓ Arte salva. Link público:</div>
+            <div style={{ wordBreak: "break-all", color: MAR, marginBottom: 8 }}>{savedUrl}</div>
+            <button onClick={() => { try { navigator.clipboard.writeText(savedUrl); flash && flash("Link copiado."); } catch {} }} style={{ background: MAR, color: "#fff", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Copiar link</button>
+          </div>
+        )}
       </div>
     </div>
   );
