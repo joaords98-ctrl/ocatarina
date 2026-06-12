@@ -1093,7 +1093,7 @@ function ArtStudio({ a, sb, flash, onClose }) {
       const r = await fetch("/api/postar-buffer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: savedUrl, caption, when }),
+        body: JSON.stringify({ imageUrl: savedUrl, caption, when, igType: format === "story" ? "story" : "post" }),
       });
       const data = await r.json();
       if (!r.ok || !data.ok) throw new Error(data.error || "Falha ao postar.");
