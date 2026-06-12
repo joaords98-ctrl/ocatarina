@@ -40,10 +40,10 @@ export default async function handler(req, res) {
   const esc = (s) => String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
 
   try {
-    // 1) organizações
-    const orgQ = `query { organizations { id name } }`;
+    // 1) organizações (aninhadas em account)
+    const orgQ = `query { account { organizations { id name } } }`;
     const orgR = await gql(orgQ, BUFFER_TOKEN);
-    const orgs = orgR.json?.data?.organizations;
+    const orgs = orgR.json?.data?.account?.organizations;
     if (!Array.isArray(orgs) || !orgs.length) {
       return res.status(502).json({ error: "Não foi possível obter sua organização no Buffer.", detail: orgR.json });
     }
