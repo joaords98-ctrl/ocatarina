@@ -1165,7 +1165,7 @@ function ArtStudio({ a, sb, flash, onClose }) {
               {posting ? "Enviando…" : postWhen === "schedule" ? "📅 Agendar no Buffer" : "✅ Publicar agora"}
             </button>
             <div style={{ marginTop: 8, fontSize: 11, color: "rgba(26,26,24,.5)", lineHeight: 1.5 }}>
-              O post é criado no Buffer, que publica no @ocatarinajornal. Confira no painel do Buffer.
+              "Publicar agora" envia ao Instagram em ~1 minuto. "Agendar" usa a data escolhida. Confira no painel do Buffer.
             </div>
           </div>
         )}
