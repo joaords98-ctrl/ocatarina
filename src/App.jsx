@@ -1069,13 +1069,29 @@ function ArtStudio({ a, sb, flash, onClose }) {
       if (error) throw error;
       const { data } = sb.storage.from("fotos").getPublicUrl(path);
       setSavedUrl(data.publicUrl);
-      // legenda automática (editável): título + resumo + chamada + hashtags
+      // legenda automática (editável): título + resumo + corpo da notícia + chamada + hashtags
       if (!caption) {
         const resumo = a.summary ? `${a.summary}\n\n` : "";
+        // corpo da matéria (remove **negrito** de markdown), limitado a ~1500 chars cortando em parágrafo
+        let corpo = "";
+        if (a.body) {
+          const limpo = a.body.replace(/\*\*/g, "").trim();
+          if (limpo.length <= 1500) corpo = limpo;
+          else {
+            const paras = limpo.split("\n").filter(Boolean);
+            let acc = "";
+            for (const p of paras) {
+              if ((acc + p).length > 1500) break;
+              acc += (acc ? "\n\n" : "") + p;
+            }
+            corpo = (acc || limpo.slice(0, 1500)) + "…";
+          }
+          corpo += "\n\n";
+        }
         const cidade = a.city ? `📍 ${a.city}\n` : "";
         const chamada = "📲 Leia mais no site: ocatarina.com.br\n\n";
         const tags = `#SantaCatarina #OCatarina #${(a.seal || "noticias").toLowerCase()}`;
-        setCaption(`${a.title}\n\n${resumo}${chamada}${cidade}${tags}`);
+        setCaption(`${a.title}\n\n${resumo}${corpo}${chamada}${cidade}${tags}`);
       }
       flash && flash("🖼️ Arte salva no site.");
     } catch (e) {
