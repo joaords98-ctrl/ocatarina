@@ -1069,11 +1069,13 @@ function ArtStudio({ a, sb, flash, onClose }) {
       if (error) throw error;
       const { data } = sb.storage.from("fotos").getPublicUrl(path);
       setSavedUrl(data.publicUrl);
-      // legenda automática (editável) a partir da notícia
+      // legenda automática (editável): título + resumo + chamada + hashtags
       if (!caption) {
-        const sealTxt = a.seal ? `[${(SEALS[a.seal]?.label || a.seal).toUpperCase()}] ` : "";
-        const cidade = a.city ? `📍 ${a.city}\n\n` : "";
-        setCaption(`${sealTxt}${a.title}\n\n${a.summary || ""}\n\n${cidade}#SantaCatarina #OCatarina #${(a.seal || "noticias").toLowerCase()}`);
+        const resumo = a.summary ? `${a.summary}\n\n` : "";
+        const cidade = a.city ? `📍 ${a.city}\n` : "";
+        const chamada = "📲 Leia mais no site: ocatarina.com.br\n\n";
+        const tags = `#SantaCatarina #OCatarina #${(a.seal || "noticias").toLowerCase()}`;
+        setCaption(`${a.title}\n\n${resumo}${chamada}${cidade}${tags}`);
       }
       flash && flash("🖼️ Arte salva no site.");
     } catch (e) {
@@ -1096,7 +1098,7 @@ function ArtStudio({ a, sb, flash, onClose }) {
         body: JSON.stringify({ imageUrl: savedUrl, caption, when, igType: format === "story" ? "story" : "post" }),
       });
       const data = await r.json();
-      if (!r.ok || !data.ok) throw new Error(data.error || "Falha ao postar.");
+      if (!r.ok || !data.ok) throw new Error((data.error || "Falha ao postar.") + (data.debug ? " | " + data.debug : ""));
       flash && flash(data.scheduled ? "📅 Post agendado no Buffer!" : "✅ Enviado ao Buffer para publicação!");
     } catch (e) {
       flash && flash("Erro: " + (e.message || "não foi possível postar."));
