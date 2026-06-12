@@ -31,14 +31,7 @@ export default async function handler(req, res) {
 
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
-  const { imageUrl, caption, when, igType, introspect } = body || {};
-
-  // MODO DIAGNÓSTICO: descobrir os campos aceitos pelo CreatePostInput
-  if (introspect) {
-    const introQ = `query { __type(name: "CreatePostInput") { inputFields { name type { name kind ofType { name kind } } } } }`;
-    const r = await gql(introQ, BUFFER_TOKEN);
-    return res.status(200).json({ schema: r.json });
-  }
+  const { imageUrl, caption, when, igType } = body || {};
 
   if (!imageUrl) return res.status(400).json({ error: "Falta a imagem (imageUrl)." });
   if (!caption || !caption.trim()) return res.status(400).json({ error: "Falta a legenda." });
@@ -77,7 +70,10 @@ export default async function handler(req, res) {
       scheduling = "customScheduled";
       dueLine = `dueAt: "${iso}"`;
     } else {
-      scheduling = "addToQueue";
+      // "publicar agora": agenda para +1 min (a API não tem modo imediato; assim sai quase na hora)
+      const soon = new Date(Date.now() + 60 * 1000).toISOString();
+      scheduling = "customScheduled";
+      dueLine = `dueAt: "${soon}"`;
     }
 
     const mutation = `
@@ -98,10 +94,6 @@ mutation {
 
     const postR = await gql(mutation, BUFFER_TOKEN);
     const payload = postR.json?.data?.createPost;
-
-    // log de diagnóstico (aparece nos runtime logs da Vercel)
-    console.log("BUFFER_MUTATION:", mutation);
-    console.log("BUFFER_RESPONSE:", JSON.stringify(postR.json));
 
     // erro GraphQL (sintaxe/permissão)
     if (postR.json?.errors?.length) {
