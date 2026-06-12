@@ -102,10 +102,10 @@ mutation {
     }
     // erro de mutação (limite, validação)
     if (payload && payload.message && !payload.post) {
-      return res.status(502).json({ error: payload.message, tipo: TYPE });
+      return res.status(502).json({ error: payload.message, tipo: TYPE, debug: JSON.stringify(postR.json).slice(0, 500) });
     }
     if (!payload || !payload.post) {
-      return res.status(502).json({ error: "O Buffer não confirmou a criação do post.", detail: postR.json });
+      return res.status(502).json({ error: "O Buffer não confirmou a criação do post.", debug: JSON.stringify(postR.json).slice(0, 500) });
     }
 
     return res.status(200).json({

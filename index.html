@@ -1096,7 +1096,7 @@ function ArtStudio({ a, sb, flash, onClose }) {
         body: JSON.stringify({ imageUrl: savedUrl, caption, when, igType: format === "story" ? "story" : "post" }),
       });
       const data = await r.json();
-      if (!r.ok || !data.ok) throw new Error(data.error || "Falha ao postar.");
+      if (!r.ok || !data.ok) throw new Error((data.error || "Falha ao postar.") + (data.debug ? " | " + data.debug : ""));
       flash && flash(data.scheduled ? "📅 Post agendado no Buffer!" : "✅ Enviado ao Buffer para publicação!");
     } catch (e) {
       flash && flash("Erro: " + (e.message || "não foi possível postar."));
