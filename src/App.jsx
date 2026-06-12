@@ -887,6 +887,7 @@ function ShareBar({ a }) {
 function ArtStudio({ a, sb, flash, onClose }) {
   const canvasRef = useRef(null);
   const [format, setFormat] = useState("feed"); // feed 4:5 | story 9:16
+  const [showSeal, setShowSeal] = useState(true);
   const [focusY, setFocusY] = useState(0.4);
   const [focusX, setFocusX] = useState(0.5);
   const [zoom, setZoom] = useState(1);
@@ -980,7 +981,7 @@ function ArtStudio({ a, sb, flash, onClose }) {
         ctx.fillStyle = AREIA; ctx.font = "500 46px Lora"; ctx.textBaseline = "middle";
         ctx.fillText("O Catarina", M + 84, 98);
         // selo da editoria (direita)
-        drawSeal(ctx, a.seal, W - M, 98);
+        if (showSeal) drawSeal(ctx, a.seal, W - M, 98);
 
         // MANCHETE (Lora) acima do rodapé
         const footY = H - (format === "feed" ? 150 : 200);
@@ -1046,7 +1047,7 @@ function ArtStudio({ a, sb, flash, onClose }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [format, focusY, focusX, zoom, a]);
+  }, [format, focusY, focusX, zoom, showSeal, a]);
 
   function wrap(ctx, text, maxW) {
     ctx.font = "600 70px Lora";
@@ -1116,9 +1117,10 @@ function ArtStudio({ a, sb, flash, onClose }) {
           <h3 style={{ fontFamily: SERIF, fontSize: 20, color: PINHEIRO, margin: 0 }}>Arte para redes</h3>
           <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: "50%", border: "none", background: "rgba(14,59,46,.1)", color: PINHEIRO, fontSize: 18, cursor: "pointer" }}>×</button>
         </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
           <button className={"chip" + (format === "feed" ? " active" : "")} onClick={() => setFormat("feed")}>Feed 4:5</button>
           <button className={"chip" + (format === "story" ? " active" : "")} onClick={() => setFormat("story")}>Story 9:16</button>
+          <button className={"chip" + (showSeal ? " active" : "")} onClick={() => setShowSeal(s => !s)} style={{ marginLeft: "auto" }}>{showSeal ? "🏷️ Com selo" : "Sem selo"}</button>
         </div>
         <div style={{ borderRadius: 12, overflow: "hidden", background: PINHEIRO, position: "relative", minHeight: 200 }}>
           {rendering && <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: MAR_BRIGHT, fontSize: 14, zIndex: 2 }}>Gerando arte…</div>}
@@ -1201,10 +1203,20 @@ function drawSeal(ctx, type, xRight, cy) {
   const tw = ctx.measureText(label).width;
   const w = tw + padX * 2;
   const x = xRight - w, y = cy - h / 2;
-  ctx.fillStyle = s.bg.startsWith("rgba") ? "rgba(29,158,117,.16)" : s.bg;
+  // sombra suave para destacar o selo sobre fotos claras
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,.35)"; ctx.shadowBlur = 12; ctx.shadowOffsetY = 2;
+  // fundo: selos translúcidos viram sólido escuro (Pinheiro) p/ garantir contraste sobre qualquer foto
+  const solidBg = s.bg.startsWith("rgba") ? PINHEIRO : s.bg;
+  ctx.fillStyle = solidBg;
   roundRect(ctx, x, y, w, h, 8); ctx.fill();
-  if (s.border) { ctx.strokeStyle = "rgba(29,158,117,.5)"; ctx.lineWidth = 2; roundRect(ctx, x, y, w, h, 8); ctx.stroke(); }
-  ctx.fillStyle = (type === "ECONOMIA" || type === "CIDADES" || type === "ESPORTES") ? AREIA : s.fg;
+  ctx.restore();
+  // borda clara fina p/ separar do fundo
+  ctx.strokeStyle = "rgba(247,246,241,.35)"; ctx.lineWidth = 1.5;
+  roundRect(ctx, x, y, w, h, 8); ctx.stroke();
+  // texto: claro sobre fundo escuro
+  const lightText = s.bg.startsWith("rgba") || type === "ECONOMIA" || type === "CIDADES" || type === "ESPORTES" || type === "PLANTAO";
+  ctx.fillStyle = lightText ? AREIA : s.fg;
   ctx.textBaseline = "middle"; ctx.fillText(label, x + padX, cy + 1);
   ctx.textBaseline = "alphabetic";
 }
