@@ -29,6 +29,16 @@ const SEALS = {
   VERIFICADO: { label: "Verificado", bg: PINHEIRO, fg: MAR_BRIGHT, check: true },
 };
 
+// interpreta o seal: fixo (chave do SEALS) ou personalizado "CUSTOM:texto" / "CUSTOMR:texto" (urgente=vermelho)
+function resolveSeal(type) {
+  if (typeof type === "string" && (type.startsWith("CUSTOM:") || type.startsWith("CUSTOMR:"))) {
+    const urgent = type.startsWith("CUSTOMR:");
+    const label = type.slice(type.indexOf(":") + 1).trim() || "Especial";
+    return { label, bg: urgent ? VERMELHO : MAR, fg: "#fff", custom: true, urgent };
+  }
+  return SEALS[type] || SEALS.POLITICA;
+}
+
 function Symbol({ size = 48, ring = MAR_BRIGHT, w1 = MAR, w2 = "#7d9b8f" }) {
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" style={{ display: "block", flex: "none" }}>
@@ -40,7 +50,7 @@ function Symbol({ size = 48, ring = MAR_BRIGHT, w1 = MAR, w2 = "#7d9b8f" }) {
   );
 }
 function Seal({ type, style }) {
-  const s = SEALS[type] || SEALS.POLITICA;
+  const s = resolveSeal(type);
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: SANS, fontSize: 11, fontWeight: 700, letterSpacing: ".13em", textTransform: "uppercase", padding: "5px 11px", borderRadius: 4, background: s.bg, color: s.fg, border: s.border ? `1px solid ${s.border}` : "none", ...style }}>
       {s.check ? "✓ " : ""}{s.label}
@@ -518,6 +528,9 @@ function Redacao({ articles, saveArticle, delArticle, publishNow, sb, flash }) {
   const [restored, setRestored] = useState(false);
   const titleRef = useRef(null);
   const up = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const isCustomSeal = typeof form.seal === "string" && (form.seal.startsWith("CUSTOM:") || form.seal.startsWith("CUSTOMR:"));
+  const customUrgent = typeof form.seal === "string" && form.seal.startsWith("CUSTOMR:");
+  const customText = isCustomSeal ? form.seal.slice(form.seal.indexOf(":") + 1) : "";
 
   // Recuperar rascunho automático do navegador ao abrir
   useEffect(() => {
@@ -643,7 +656,24 @@ function Redacao({ articles, saveArticle, delArticle, publishNow, sb, flash }) {
         <label className="oc-label">Editoria / Selo</label>
         <div className="seal-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
           {Object.keys(SEALS).map(k => <div key={k} className={"seal-pick" + (form.seal === k ? " sel" : "")} onClick={() => up("seal", k)}><Seal type={k} /></div>)}
+          <div className={"seal-pick" + (isCustomSeal ? " sel" : "")} onClick={() => up("seal", "CUSTOM:")}>
+            <span style={{ fontFamily: SANS, fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: PINHEIRO }}>✎ Personalizado</span>
+          </div>
         </div>
+        {isCustomSeal && (
+          <div style={{ marginTop: 10, padding: 12, background: "rgba(29,158,117,.07)", borderRadius: 9 }}>
+            <label className="oc-label">Texto do selo personalizado</label>
+            <input className="oc-input" value={customText} maxLength={22}
+              onChange={e => up("seal", (customUrgent ? "CUSTOMR:" : "CUSTOM:") + e.target.value)}
+              placeholder="Ex: ELEIÇÕES 2026, ESPECIAL, ENCHENTES" />
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer", color: PINHEIRO, marginTop: 10 }}>
+              <input type="checkbox" checked={customUrgent} onChange={e => up("seal", (e.target.checked ? "CUSTOMR:" : "CUSTOM:") + customText)} style={{ width: 16, height: 16, accentColor: VERMELHO }} />
+              Urgente (vermelho)
+            </label>
+            <div style={{ marginTop: 10, fontSize: 11, color: "rgba(26,26,24,.55)", marginBottom: 4 }}>Prévia:</div>
+            <Seal type={form.seal} />
+          </div>
+        )}
         {form.seal === "PLANTAO" && <div style={{ marginTop: 8, fontSize: 12, color: VERMELHO }}>⚠ Vermelho é só para última hora. Use com parcimônia.</div>}
         <div style={{ height: 16 }} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -1196,7 +1226,7 @@ function drawSymbol(ctx, cx, cy, r) {
 }
 // selo no canvas (alinhado à direita em x)
 function drawSeal(ctx, type, xRight, cy) {
-  const s = SEALS[type] || SEALS.POLITICA;
+  const s = resolveSeal(type);
   const label = (s.check ? "✓ " : "") + s.label.toUpperCase();
   ctx.font = "700 28px 'Libre Franklin'";
   const padX = 22, h = 50;
@@ -1215,7 +1245,7 @@ function drawSeal(ctx, type, xRight, cy) {
   ctx.strokeStyle = "rgba(247,246,241,.35)"; ctx.lineWidth = 1.5;
   roundRect(ctx, x, y, w, h, 8); ctx.stroke();
   // texto: claro sobre fundo escuro
-  const lightText = s.bg.startsWith("rgba") || type === "ECONOMIA" || type === "CIDADES" || type === "ESPORTES" || type === "PLANTAO";
+  const lightText = s.bg.startsWith("rgba") || type === "ECONOMIA" || type === "CIDADES" || type === "ESPORTES" || type === "PLANTAO" || s.custom;
   ctx.fillStyle = lightText ? AREIA : s.fg;
   ctx.textBaseline = "middle"; ctx.fillText(label, x + padX, cy + 1);
   ctx.textBaseline = "alphabetic";
