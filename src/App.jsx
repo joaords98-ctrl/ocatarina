@@ -903,6 +903,7 @@ function ArtStudio({ a, sb, flash, onClose }) {
 
   useEffect(() => {
     let cancelled = false;
+    setSavedUrl(""); // formato/enquadramento mudou: invalida a arte salva, força gerar a atual
     (async () => {
       setRendering(true);
       try {
@@ -1082,19 +1083,16 @@ function ArtStudio({ a, sb, flash, onClose }) {
     if (tainted) { flash && flash("A foto veio de URL externa. Carregue a foto pelo upload na notícia e gere a arte de novo."); return; }
     setPosting(true);
     try {
-      // garante a arte salva no Storage (gera URL pública p/ o Buffer)
-      let url = savedUrl;
-      if (!url) {
-        const canvas = canvasRef.current;
-        if (!canvas) throw new Error("Arte não gerada ainda.");
-        const blob = await new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error("falha ao gerar imagem")), "image/png"));
-        const slug = (a.title || "arte").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").slice(0, 40);
-        const path = `artes/${format}-${Date.now()}-${slug}.png`;
-        const { error } = await sb.storage.from("fotos").upload(path, blob, { cacheControl: "3600", upsert: false, contentType: "image/png" });
-        if (error) throw error;
-        url = sb.storage.from("fotos").getPublicUrl(path).data.publicUrl;
-        setSavedUrl(url);
-      }
+      // gera SEMPRE a arte do canvas atual (evita reusar formato/enquadramento antigo)
+      const canvas = canvasRef.current;
+      if (!canvas) throw new Error("Arte não gerada ainda.");
+      const blob = await new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error("falha ao gerar imagem")), "image/png"));
+      const slug = (a.title || "arte").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").slice(0, 40);
+      const path = `artes/${format}-${Date.now()}-${slug}.png`;
+      const { error } = await sb.storage.from("fotos").upload(path, blob, { cacheControl: "3600", upsert: false, contentType: "image/png" });
+      if (error) throw error;
+      const url = sb.storage.from("fotos").getPublicUrl(path).data.publicUrl;
+      setSavedUrl(url);
       const when = postWhen === "schedule" ? new Date(scheduleAt).toISOString() : "now";
       const r = await fetch("/api/postar-buffer", {
         method: "POST",
