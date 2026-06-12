@@ -31,10 +31,21 @@ export default async function handler(req, res) {
 
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
-  const { imageUrl, caption, when } = body || {};
+  const { imageUrl, caption, when, igType, introspect } = body || {};
+
+  // MODO DIAGNÓSTICO: descobrir os campos aceitos pelo CreatePostInput
+  if (introspect) {
+    const introQ = `query { __type(name: "CreatePostInput") { inputFields { name type { name kind ofType { name kind } } } } }`;
+    const r = await gql(introQ, BUFFER_TOKEN);
+    return res.status(200).json({ schema: r.json });
+  }
 
   if (!imageUrl) return res.status(400).json({ error: "Falta a imagem (imageUrl)." });
   if (!caption || !caption.trim()) return res.status(400).json({ error: "Falta a legenda." });
+
+  // tipo de post do Instagram: post (feed) | story | reel
+  const TYPE = ["post", "story", "reel"].includes(igType) ? igType : "post";
+  const shareToFeed = "true"; // post e reel aparecem no feed; obrigatório no schema
 
   // escapa aspas/quebras para inserir no corpo GraphQL
   const esc = (s) => String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
@@ -78,6 +89,7 @@ mutation {
     mode: ${scheduling}
     ${dueLine}
     assets: [ { image: { url: "${esc(imageUrl)}" } } ]
+    metadata: { instagram: { type: ${TYPE}, shouldShareToFeed: ${shareToFeed} } }
   }) {
     ... on PostActionSuccess { post { id dueAt } }
     ... on MutationError { message }
@@ -87,16 +99,20 @@ mutation {
     const postR = await gql(mutation, BUFFER_TOKEN);
     const payload = postR.json?.data?.createPost;
 
+    // log de diagnóstico (aparece nos runtime logs da Vercel)
+    console.log("BUFFER_MUTATION:", mutation);
+    console.log("BUFFER_RESPONSE:", JSON.stringify(postR.json));
+
     // erro GraphQL (sintaxe/permissão)
     if (postR.json?.errors?.length) {
-      return res.status(502).json({ error: postR.json.errors[0]?.message || "Erro do Buffer.", detail: postR.json.errors });
+      return res.status(502).json({ error: "GraphQL: " + (postR.json.errors[0]?.message || "erro"), detail: postR.json.errors });
     }
     // erro de mutação (limite, validação)
     if (payload && payload.message && !payload.post) {
-      return res.status(502).json({ error: payload.message });
+      return res.status(502).json({ error: payload.message, tipo: TYPE, debug: JSON.stringify(postR.json).slice(0, 500) });
     }
     if (!payload || !payload.post) {
-      return res.status(502).json({ error: "O Buffer não confirmou a criação do post.", detail: postR.json });
+      return res.status(502).json({ error: "O Buffer não confirmou a criação do post.", debug: JSON.stringify(postR.json).slice(0, 500) });
     }
 
     return res.status(200).json({
