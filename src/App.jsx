@@ -893,7 +893,6 @@ function ArtStudio({ a, sb, flash, onClose }) {
   const [rendering, setRendering] = useState(true);
   const [preview, setPreview] = useState("");
   const [tainted, setTainted] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [savedUrl, setSavedUrl] = useState("");
   const [caption, setCaption] = useState("");
   const [posting, setPosting] = useState(false);
@@ -1015,6 +1014,27 @@ function ArtStudio({ a, sb, flash, onClose }) {
           try {
             setPreview(cvs.toDataURL("image/png"));
             setTainted(false);
+            // monta a legenda automática uma vez (editável depois)
+            setCaption(prev => {
+              if (prev) return prev;
+              const resumo = a.summary ? `${a.summary}\n\n` : "";
+              let corpo = "";
+              if (a.body) {
+                const limpo = a.body.replace(/\*\*/g, "").trim();
+                if (limpo.length <= 1500) corpo = limpo;
+                else {
+                  const paras = limpo.split("\n").filter(Boolean);
+                  let acc = "";
+                  for (const p of paras) { if ((acc + p).length > 1500) break; acc += (acc ? "\n\n" : "") + p; }
+                  corpo = (acc || limpo.slice(0, 1500)) + "…";
+                }
+                corpo += "\n\n";
+              }
+              const cidade = a.city ? `📍 ${a.city}\n` : "";
+              const chamada = "📲 Leia mais no site: ocatarina.com.br\n\n";
+              const tags = `#SantaCatarina #OCatarina #${(a.seal || "noticias").toLowerCase()}`;
+              return `${a.title}\n\n${resumo}${corpo}${chamada}${cidade}${tags}`;
+            });
           } catch (e) {
             setTainted(true);
             setPreview("");
@@ -1056,66 +1076,34 @@ function ArtStudio({ a, sb, flash, onClose }) {
     }
   }
 
-  async function saveArt() {
-    if (!sb) { flash && flash("Supabase indisponível."); return; }
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    setSaving(true); setSavedUrl("");
-    try {
-      const blob = await new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error("falha")), "image/png"));
-      const slug = (a.title || "arte").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").slice(0, 40);
-      const path = `artes/${format}-${Date.now()}-${slug}.png`;
-      const { error } = await sb.storage.from("fotos").upload(path, blob, { cacheControl: "3600", upsert: false, contentType: "image/png" });
-      if (error) throw error;
-      const { data } = sb.storage.from("fotos").getPublicUrl(path);
-      setSavedUrl(data.publicUrl);
-      // legenda automática (editável): título + resumo + corpo da notícia + chamada + hashtags
-      if (!caption) {
-        const resumo = a.summary ? `${a.summary}\n\n` : "";
-        // corpo da matéria (remove **negrito** de markdown), limitado a ~1500 chars cortando em parágrafo
-        let corpo = "";
-        if (a.body) {
-          const limpo = a.body.replace(/\*\*/g, "").trim();
-          if (limpo.length <= 1500) corpo = limpo;
-          else {
-            const paras = limpo.split("\n").filter(Boolean);
-            let acc = "";
-            for (const p of paras) {
-              if ((acc + p).length > 1500) break;
-              acc += (acc ? "\n\n" : "") + p;
-            }
-            corpo = (acc || limpo.slice(0, 1500)) + "…";
-          }
-          corpo += "\n\n";
-        }
-        const cidade = a.city ? `📍 ${a.city}\n` : "";
-        const chamada = "📲 Leia mais no site: ocatarina.com.br\n\n";
-        const tags = `#SantaCatarina #OCatarina #${(a.seal || "noticias").toLowerCase()}`;
-        setCaption(`${a.title}\n\n${resumo}${corpo}${chamada}${cidade}${tags}`);
-      }
-      flash && flash("🖼️ Arte salva no site.");
-    } catch (e) {
-      flash && flash("Erro ao salvar a arte: " + (e.message || "tente de novo"));
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function postToBuffer() {
-    if (!savedUrl) { flash && flash("Salve a arte primeiro."); return; }
     if (!caption.trim()) { flash && flash("Escreva uma legenda."); return; }
     if (postWhen === "schedule" && !scheduleAt) { flash && flash("Escolha a data do agendamento."); return; }
+    if (tainted) { flash && flash("A foto veio de URL externa. Carregue a foto pelo upload na notícia e gere a arte de novo."); return; }
     setPosting(true);
     try {
+      // garante a arte salva no Storage (gera URL pública p/ o Buffer)
+      let url = savedUrl;
+      if (!url) {
+        const canvas = canvasRef.current;
+        if (!canvas) throw new Error("Arte não gerada ainda.");
+        const blob = await new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error("falha ao gerar imagem")), "image/png"));
+        const slug = (a.title || "arte").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").slice(0, 40);
+        const path = `artes/${format}-${Date.now()}-${slug}.png`;
+        const { error } = await sb.storage.from("fotos").upload(path, blob, { cacheControl: "3600", upsert: false, contentType: "image/png" });
+        if (error) throw error;
+        url = sb.storage.from("fotos").getPublicUrl(path).data.publicUrl;
+        setSavedUrl(url);
+      }
       const when = postWhen === "schedule" ? new Date(scheduleAt).toISOString() : "now";
       const r = await fetch("/api/postar-buffer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: savedUrl, caption, when, igType: format === "story" ? "story" : "post" }),
+        body: JSON.stringify({ imageUrl: url, caption, when, igType: format === "story" ? "story" : "post" }),
       });
       const data = await r.json();
       if (!r.ok || !data.ok) throw new Error((data.error || "Falha ao postar.") + (data.debug ? " | " + data.debug : ""));
-      flash && flash(data.scheduled ? "📅 Post agendado no Buffer!" : "✅ Enviado ao Buffer para publicação!");
+      flash && flash(data.scheduled ? "📅 Post agendado no Buffer!" : "✅ Enviado ao Instagram (sai em ~1 min)!");
     } catch (e) {
       flash && flash("Erro: " + (e.message || "não foi possível postar."));
     } finally {
@@ -1162,14 +1150,11 @@ function ArtStudio({ a, sb, flash, onClose }) {
         <button className="oc-btn" style={{ background: MAR, color: "#fff", width: "100%", marginTop: 16, opacity: (preview && !tainted) ? 1 : .5 }} onClick={download} disabled={!preview || tainted}>
           ⬇ Baixar PNG ({format === "feed" ? "1080×1350" : "1080×1920"})
         </button>
-        <button className="oc-btn" style={{ background: PINHEIRO, color: "#fff", width: "100%", marginTop: 10, opacity: saving ? .6 : 1 }} onClick={saveArt} disabled={saving}>
-          {saving ? "Salvando…" : "🖼️ Salvar arte no site"}
-        </button>
-        {savedUrl && (
-          <div style={{ marginTop: 12, padding: 14, background: "rgba(29,158,117,.08)", borderRadius: 10, border: "1px solid rgba(29,158,117,.2)" }}>
+        {(preview && !tainted) && (
+          <div style={{ marginTop: 14, padding: 14, background: "rgba(29,158,117,.08)", borderRadius: 10, border: "1px solid rgba(29,158,117,.2)" }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: PINHEIRO, marginBottom: 10 }}>📲 Postar no Instagram (via Buffer)</div>
             <label className="oc-label">Legenda</label>
-            <textarea className="oc-input" rows={5} value={caption} onChange={e => setCaption(e.target.value)} style={{ resize: "vertical", fontSize: 13 }} />
+            <textarea className="oc-input" rows={6} value={caption} onChange={e => setCaption(e.target.value)} style={{ resize: "vertical", fontSize: 13 }} />
             <div style={{ display: "flex", gap: 8, margin: "10px 0" }}>
               <button onClick={() => setPostWhen("now")} className={"chip" + (postWhen === "now" ? " active" : "")}>Publicar agora</button>
               <button onClick={() => setPostWhen("schedule")} className={"chip" + (postWhen === "schedule" ? " active" : "")}>Agendar</button>
@@ -1178,10 +1163,10 @@ function ArtStudio({ a, sb, flash, onClose }) {
               <input type="datetime-local" className="oc-input" value={scheduleAt} onChange={e => setScheduleAt(e.target.value)} style={{ marginBottom: 10 }} />
             )}
             <button className="oc-btn" style={{ background: "#C13584", color: "#fff", width: "100%", opacity: posting ? .6 : 1 }} onClick={postToBuffer} disabled={posting}>
-              {posting ? "Enviando…" : postWhen === "schedule" ? "📅 Agendar no Buffer" : "✅ Publicar agora"}
+              {posting ? "Enviando…" : postWhen === "schedule" ? "📅 Agendar no Instagram" : "✅ Postar no Instagram"}
             </button>
             <div style={{ marginTop: 8, fontSize: 11, color: "rgba(26,26,24,.5)", lineHeight: 1.5 }}>
-              "Publicar agora" envia ao Instagram em ~1 minuto. "Agendar" usa a data escolhida. Confira no painel do Buffer.
+              "Postar no Instagram" sai em ~1 minuto. "Agendar" usa a data escolhida. Confira no painel do Buffer.
             </div>
           </div>
         )}
